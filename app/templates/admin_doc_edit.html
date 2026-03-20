@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell narrow">
+  <div class="admin-topbar">
+    <div>
+      <h1>Editar documento</h1>
+      <p>Documento #{{ doc.id }}</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs/{{ doc.id }}">Volver</a>
+    </div>
+  </div>
+
+  <form class="admin-form-card" method="post" action="/rag/admin/docs/{{ doc.id }}/edit">
+    <div class="form-grid">
+      <div class="field field-span-2">
+        <label>Título</label>
+        <input type="text" name="title" value="{{ doc.title }}" required>
+      </div>
+
+      <div class="field field-span-2">
+        <label>URL</label>
+        <input type="text" name="url" value="{{ doc.url or '' }}">
+      </div>
+
+      <div class="field">
+        <label>Tipo de documento</label>
+        <input type="text" name="document_type" value="{{ doc.document_type or '' }}">
+      </div>
+
+      <div class="field">
+        <label>Organismo</label>
+        <input type="text" name="organism" value="{{ doc.organism or '' }}">
+      </div>
+
+      <div class="field field-span-2">
+        <label>Tema</label>
+        <input type="text" name="topic" value="{{ doc.topic or '' }}">
+      </div>
+
+      <div class="field field-span-2">
+        <label>Resumen</label>
+        <textarea name="summary" rows="4">{{ doc.summary or '' }}</textarea>
+      </div>
+
+      <div class="field field-span-2">
+        <label>Contenido textual</label>
+        <textarea name="content_text" rows="16" required>{{ doc.content_text or '' }}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Publicado</label>
+        <select name="is_published">
+          <option value="true" {% if doc.is_published %}selected{% endif %}>Sí</option>
+          <option value="false" {% if not doc.is_published %}selected{% endif %}>No</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs/{{ doc.id }}">Cancelar</a>
+      <button class="btn btn-primary" type="submit">Guardar cambios</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

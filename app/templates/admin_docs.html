@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell">
+  <div class="admin-topbar">
+    <div>
+      <h1>Documentos eddi</h1>
+      <p>Base documental administrable</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/">Ir al chat</a>
+      <a class="btn btn-secondary" href="/rag/admin/docs/ingest">Cargar desde URL / PDF</a>
+      <a class="btn btn-primary" href="/rag/admin/docs/new">Nuevo manual</a>
+    </div>
+  </div>
+
+  <div class="admin-card filters-card">
+    <form class="filters-form filters-form-docs" method="get" action="/rag/admin/docs">
+      <div class="field">
+        <label>Buscar</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Título, URL, organismo, tema...">
+      </div>
+
+      <div class="field">
+        <label>Tipo</label>
+        <select name="document_type">
+          <option value="">Todos</option>
+          {% for t in all_types %}
+          <option value="{{ t }}" {% if document_type == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Publicado</label>
+        <select name="published">
+          <option value="" {% if not published %}selected{% endif %}>Todos</option>
+          <option value="yes" {% if published == 'yes' %}selected{% endif %}>Sí</option>
+          <option value="no" {% if published == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Requiere OCR</label>
+        <select name="needs_ocr">
+          <option value="" {% if not needs_ocr %}selected{% endif %}>Todos</option>
+          <option value="yes" {% if needs_ocr == 'yes' %}selected{% endif %}>Sí</option>
+          <option value="no" {% if needs_ocr == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>PDF con imágenes</label>
+        <select name="has_images">
+          <option value="" {% if not has_images %}selected{% endif %}>Todos</option>
+          <option value="yes" {% if has_images == 'yes' %}selected{% endif %}>Sí</option>
+          <option value="no" {% if has_images == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>PDF embebido</label>
+        <select name="embedded_pdf">
+          <option value="" {% if not embedded_pdf %}selected{% endif %}>Todos</option>
+          <option value="yes" {% if embedded_pdf == 'yes' %}selected{% endif %}>Sí</option>
+          <option value="no" {% if embedded_pdf == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+
+      <div class="filters-actions">
+        <button class="btn btn-primary" type="submit">Filtrar</button>
+        <a class="btn btn-secondary" href="/rag/admin/docs">Limpiar</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-head">
+      <h2>Listado</h2>
+      <span class="badge">{{ docs|length }} registros</span>
+    </div>
+
+    {% if docs %}
+    <div class="table-wrap docs-table-wrap">
+      <table class="table-admin docs-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Título</th>
+            <th>Señales</th>
+            <th>Tipo</th>
+            <th>Organismo</th>
+            <th>Publicado</th>
+            <th>Creado</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in docs %}
+          {% set meta = d.metadata_json or {} %}
+          {% set low_text_pdf = meta.get("low_text_pdf") %}
+          {% set pdf_has_images = meta.get("pdf_has_images") %}
+          {% set embedded_from_html = meta.get("embedded_from_html") %}
+
+          <tr>
+            <td>#{{ d.id }}</td>
+            <td>
+              <div class="cell-title">{{ d.title }}</div>
+              {% if d.url %}
+              <div class="cell-sub">{{ d.url }}</div>
+              {% endif %}
+            </td>
+
+            <td>
+              <div class="tag-stack">
+                {% if low_text_pdf %}
+                <span class="meta-pill danger">Requiere OCR</span>
+                {% endif %}
+                {% if pdf_has_images %}
+                <span class="meta-pill warn">PDF con imágenes</span>
+                {% endif %}
+                {% if embedded_from_html %}
+                <span class="meta-pill info">PDF embebido</span>
+                {% endif %}
+                {% if not low_text_pdf and not pdf_has_images and not embedded_from_html %}
+                <span class="meta-pill">Normal</span>
+                {% endif %}
+              </div>
+            </td>
+
+            <td>{{ d.document_type or "-" }}</td>
+            <td>{{ d.organism or "-" }}</td>
+            <td>
+              {% if d.is_published %}
+              <span class="pill ok">Sí</span>
+              {% else %}
+              <span class="pill off">No</span>
+              {% endif %}
+            </td>
+            <td>{{ d.created_at.strftime("%Y-%m-%d %H:%M") if d.created_at else "-" }}</td>
+
+            <td class="col-actions">
+              <div class="stack-inline docs-actions">
+                <a class="btn btn-secondary btn-sm" href="/rag/admin/docs/{{ d.id }}">Ver</a>
+
+                {% if d.url %}
+                <form method="post" action="/rag/admin/docs/{{ d.id }}/reingest">
+                  <button class="btn btn-primary btn-sm" type="submit">Reingestar</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No hay documentos cargados todavía.</p>
+      <a class="btn btn-primary" href="/rag/admin/docs/new">Cargar primer documento</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

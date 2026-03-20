@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}eddi{% endblock %}
+
+{% block content %}
+<div class="chat-page">
+  <div class="chat-shell">
+
+    <section class="chat-topbar-red">
+      <div class="chat-topbar-brand">
+        <img
+          src="/static/brand/eddi/logo-eddi-hyvai.png"
+          alt="EDDI HyV.ai"
+          class="chat-topbar-logo"
+        >
+        <div class="chat-topbar-text">
+          <strong>eddi</strong>
+          <span>Asistente documental inteligente</span>
+        </div>
+      </div>
+
+      <div class="chat-topbar-status">
+        <span class="chat-status-badge-red">
+          <span class="dot"></span>
+          Activo
+        </span>
+      </div>
+    </section>
+
+    <section class="chat-layout">
+
+      <aside class="chat-sidebar">
+        <div class="side-card red-soft">
+          <h3>Asistente</h3>
+          <p>
+            Esta instancia utiliza recuperación semántica con ranking híbrido y puede responder usando
+            documentos publicados de la base.
+          </p>
+        </div>
+
+        <div class="side-card">
+          <h3>Filtros opcionales</h3>
+
+          <div class="filter-field">
+            <label for="filter-document-type">Tipo</label>
+            <input id="filter-document-type" type="text" placeholder="guía, trámite, faq...">
+          </div>
+
+          <div class="filter-field">
+            <label for="filter-organism">Organismo</label>
+            <input id="filter-organism" type="text" placeholder="organismo">
+          </div>
+
+          <div class="filter-field">
+            <label for="filter-topic">Tema</label>
+            <input id="filter-topic" type="text" placeholder="tema">
+          </div>
+        </div>
+      </aside>
+
+      <main class="chat-main">
+        <div id="chat-messages" class="chat-messages">
+          <div class="msg-row assistant">
+            <div class="msg-bubble assistant-bubble">
+              <div class="msg-role">EDDI</div>
+              <div class="msg-text">
+                Hola. Ya estoy operativo con recuperación documental. Podés consultar libremente
+                o usar filtros para acotar por tipo, organismo o tema.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-compose">
+          <div class="compose-input-wrap">
+            <textarea
+              id="chat-input"
+              rows="2"
+              placeholder="Escribí tu consulta..."
+              required
+            ></textarea>
+          </div>
+
+          <button id="chat-send" type="button" class="compose-send-btn">Enviar</button>
+        </div>
+
+        <div id="chat-sources" class="chat-sources"></div>
+      </main>
+
+    </section>
+  </div>
+</div>
+
+<script>
+  const messagesEl = document.getElementById("chat-messages");
+  const inputEl = document.getElementById("chat-input");
+  const sendEl = document.getElementById("chat-send");
+  const sourcesEl = document.getElementById("chat-sources");
+
+  const filterDocumentTypeEl = document.getElementById("filter-document-type");
+  const filterOrganismEl = document.getElementById("filter-organism");
+  const filterTopicEl = document.getElementById("filter-topic");
+
+  let sessionKey = localStorage.getItem("eddi_session_key") || "";
+  let sending = false;
+  let lastQuestionText = "";
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function addMessage(role, text) {
+    const row = document.createElement("div");
+    row.className = `msg-row ${role === "user" ? "user" : "assistant"}`;
+
+    const bubble = document.createElement("div");
+    bubble.className = `msg-bubble ${role === "user" ? "user-bubble" : "assistant-bubble"}`;
+
+    const roleEl = document.createElement("div");
+    roleEl.className = "msg-role";
+    roleEl.textContent = role === "user" ? "VOS" : "EDDI";
+
+    const textEl = document.createElement("div");
+    textEl.className = "msg-text";
+    textEl.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
+
+    bubble.appendChild(roleEl);
+    bubble.appendChild(textEl);
+    row.appendChild(bubble);
+    messagesEl.appendChild(row);
+    scrollToBottom();
+
+    return row;
+  }
+
+  function dedupeSources(sources) {
+    const seen = new Set();
+    const out = [];
+
+    for (const src of sources || []) {
+      const key = [
+        src.document_id || "",
+        src.content_kind || "",
+        src.page_number || "",
+        src.image_path || "",
+        src.url || ""
+      ].join("|");
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(src);
+    }
+
+    return out;
+  }
+
+  function tokenizeQuestion(text) {
+    return String(text || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9ñ\s]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  function scoreVisualSourceForQuestion(src, question) {
+    const qTokens = tokenizeQuestion(question);
+    const haystack = [
+      src.title || "",
+      src.snippet || "",
+      src.document_type || ""
+    ]
+      .join(" ")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    let score = 0;
+
+    for (const token of qTokens) {
+      if (token.length < 3) continue;
+      if (haystack.includes(token)) score += 3;
+    }
+
+    if (haystack.includes("firmar")) score += 4;
+    if (haystack.includes("contraseña")) score += 4;
+    if (haystack.includes("contrasena")) score += 4;
+    if (haystack.includes("certificado")) score += 4;
+    if (haystack.includes("seleccionar")) score += 3;
+    if (haystack.includes("boton")) score += 2;
+    if (haystack.includes("botón")) score += 2;
+    if (haystack.includes("panel")) score += 1;
+    if (haystack.includes("pantalla")) score += 1;
+
+    return score;
+  }
+
+  function pickPrimaryVisualSource(sources, questionText) {
+    const visuals = (sources || []).filter(
+      src => src.content_kind === "image_ocr" && src.image_path
+    );
+
+    if (!visuals.length) return null;
+
+    const ranked = visuals
+      .map(src => ({
+        ...src,
+        __ui_score: scoreVisualSourceForQuestion(src, questionText)
+      }))
+      .sort((a, b) => {
+        if (b.__ui_score !== a.__ui_score) return b.__ui_score - a.__ui_score;
+        return (b.similarity || 0) - (a.similarity || 0);
+      });
+
+    return ranked[0];
+  }
+
+  function pickCompactSources(sources, primaryVisual) {
+    const filtered = [];
+
+    for (const src of sources || []) {
+      // no repetir la visual principal
+      if (
+        primaryVisual &&
+        src.content_kind === "image_ocr" &&
+        src.image_path === primaryVisual.image_path &&
+        src.page_number === primaryVisual.page_number
+      ) {
+        continue;
+      }
+
+      // excluir otras OCR visuales secundarias
+      if (src.content_kind === "image_ocr") {
+        continue;
+      }
+
+      filtered.push(src);
+    }
+
+    return filtered.slice(0, 3);
+  }
+
+  function renderSources(sources) {
+    sourcesEl.innerHTML = "";
+
+    if (!sources || !sources.length) return;
+
+    const normalized = dedupeSources(sources);
+    const primaryVisual = pickPrimaryVisualSource(
+      normalized,
+      inputEl.value || lastQuestionText || ""
+    );
+    const compactSources = pickCompactSources(normalized, primaryVisual);
+
+    const title = document.createElement("div");
+    title.className = "sources-title";
+    title.textContent = "Fuentes consultadas";
+    sourcesEl.appendChild(title);
+
+    if (primaryVisual) {
+      const visualCard = document.createElement("div");
+      visualCard.className = "source-visual-card";
+
+      visualCard.innerHTML = `
+        <div class="source-visual-head">
+          <div>
+            <div class="source-visual-title">Vista relacionada</div>
+            <div class="source-visual-meta">
+              ${escapeHtml(primaryVisual.title || "Documento")}
+              ${primaryVisual.page_number ? ` · pág. ${escapeHtml(primaryVisual.page_number)}` : ""}
+            </div>
+          </div>
+          <span class="source-kind source-kind-visual">OCR visual</span>
+        </div>
+
+        <a href="${primaryVisual.image_path}" target="_blank" rel="noopener" class="source-visual-link">
+          <img
+            src="${primaryVisual.image_path}"
+            alt="Vista OCR relacionada"
+            class="source-visual-image"
+            loading="lazy"
+          >
+        </a>
+
+        <div class="source-visual-actions">
+          ${primaryVisual.url ? `<a href="${primaryVisual.url}" target="_blank" rel="noopener">Abrir fuente</a>` : ""}
+          <a href="${primaryVisual.image_path}" target="_blank" rel="noopener">Abrir página completa</a>
+        </div>
+      `;
+
+      sourcesEl.appendChild(visualCard);
+    }
+
+    if (compactSources.length) {
+      const list = document.createElement("div");
+      list.className = "sources-compact-list";
+
+      compactSources.forEach(src => {
+        const item = document.createElement("div");
+        item.className = "source-item compact";
+
+        const kindBadge =
+          src.content_kind === "image_ocr"
+            ? `<span class="source-kind source-kind-visual">OCR visual</span>`
+            : `<span class="source-kind source-kind-text">Texto</span>`;
+
+        const pageMeta =
+          src.content_kind === "image_ocr" && src.page_number
+            ? `<span class="source-page">pág. ${escapeHtml(src.page_number)}</span>`
+            : "";
+
+        item.innerHTML = `
+          <div class="source-head">
+            <div class="source-title">${escapeHtml(src.title || "Documento")}</div>
+            <div class="source-badges">
+              ${kindBadge}
+              ${pageMeta}
+            </div>
+          </div>
+          <div class="source-meta">${escapeHtml(src.document_type || "")}</div>
+          ${src.snippet ? `<div class="source-snippet">${escapeHtml(src.snippet)}</div>` : ""}
+          ${src.url ? `<div class="source-extra"><a href="${src.url}" target="_blank" rel="noopener">Abrir fuente</a></div>` : ""}
+        `;
+
+        list.appendChild(item);
+      });
+
+      sourcesEl.appendChild(list);
+    }
+  }
+
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text || sending) return;
+
+    sending = true;
+    sendEl.disabled = true;
+    lastQuestionText = text;
+
+    addMessage("user", text);
+    inputEl.value = "";
+    sourcesEl.innerHTML = "";
+
+    const loadingNode = addMessage("assistant", "Procesando consulta...");
+
+    try {
+      const response = await fetch("/rag/eddi/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: text,
+          session_key: sessionKey || null,
+          channel: "web",
+          document_type: filterDocumentTypeEl?.value?.trim() || null,
+          organism: filterOrganismEl?.value?.trim() || null,
+          topic: filterTopicEl?.value?.trim() || null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      sessionKey = data.session_key || sessionKey;
+      localStorage.setItem("eddi_session_key", sessionKey);
+
+      loadingNode.remove();
+      addMessage("assistant", data.answer || "No se pudo generar una respuesta.");
+      renderSources(data.sources || []);
+    } catch (err) {
+      loadingNode.remove();
+      addMessage("assistant", "Ocurrió un error al procesar tu consulta.");
+      console.error("Chat error:", err);
+    } finally {
+      sending = false;
+      sendEl.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  sendEl.addEventListener("click", sendMessage);
+
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+</script>
+{% endblock %}

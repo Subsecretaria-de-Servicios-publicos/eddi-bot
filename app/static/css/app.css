@@ -1,0 +1,9 @@
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #eef4fb 0%, #f8fbff 100%);
+  color:#162033;
+}
+a{color:inherit}
+button,textarea{font:inherit}

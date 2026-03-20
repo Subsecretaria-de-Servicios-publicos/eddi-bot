@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | RAG eddi{% endblock %}
+
+{% block content %}
+<div class="admin-shell">
+  <div class="page-head">
+    <div>
+      <span class="badge-eddi">eddi</span>
+      <h1>Panel de control RAG eddi</h1>
+      <p>Resumen operativo del sistema, fuentes, documentos, jobs, chats y sincronización.</p>
+    </div>
+
+    <div class="page-actions">
+      <a class="btn btn-secondary" href="/">Ir al chat</a>
+      <a class="btn btn-soft" href="/rag/admin/docs">Documentos</a>
+      <a class="btn btn-soft" href="/rag/admin/sources">Fuentes</a>
+      <a class="btn btn-soft" href="/rag/admin/candidates">Candidates</a>
+      <a class="btn btn-soft" href="/rag/admin/chats">Chats</a>
+      <a class="btn btn-soft" href="/rag/admin/sync">Sync</a>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Documentos</div>
+      <div class="kpi-value">{{ total_documents }}</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Publicados</div>
+      <div class="kpi-value">{{ published_documents }}</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Fuentes</div>
+      <div class="kpi-value">{{ total_sources }}</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Fuentes activas</div>
+      <div class="kpi-value">{{ active_sources }}</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Jobs</div>
+      <div class="kpi-value">{{ total_jobs }}</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Candidates</div>
+      <div class="kpi-value">{{ total_candidates }}</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Sesiones</div>
+      <div class="kpi-value">{{ total_sessions }}</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Mensajes</div>
+      <div class="kpi-value">{{ total_messages }}</div>
+    </div>
+  </div>
+
+  <div class="detail-grid">
+    <section class="admin-card">
+      <div class="admin-card-head">
+        <h2>Documentos recientes</h2>
+        <a class="btn btn-secondary" href="/rag/admin/docs">Ver todos</a>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-admin">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Título</th>
+              <th>Publicado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in recent_documents %}
+            <tr>
+              <td>#{{ d.id }}</td>
+              <td>{{ d.title }}</td>
+              <td>{{ "Sí" if d.is_published else "No" }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="3">No hay documentos recientes.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="admin-card">
+      <div class="admin-card-head">
+        <h2>Jobs recientes</h2>
+        <a class="btn btn-secondary" href="/rag/admin/jobs">Ver jobs</a>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-admin">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for j in recent_jobs %}
+            <tr>
+              <td>#{{ j.id }}</td>
+              <td>{{ j.job_type }}</td>
+              <td>{{ j.status }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="3">No hay jobs recientes.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

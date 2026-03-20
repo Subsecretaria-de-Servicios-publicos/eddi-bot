@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell narrow">
+  <div class="admin-topbar">
+    <div>
+      <h1>Ingesta documental</h1>
+      <p>Carga desde URL o PDF</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs">Volver</a>
+      <a class="btn btn-primary" href="/rag/admin/docs/new">Carga manual</a>
+    </div>
+  </div>
+
+  <div class="stack-gap">
+    <div class="admin-form-card">
+      <div class="admin-card-head">
+        <h2>Ingestar desde URL</h2>
+      </div>
+
+      <form method="post" action="/rag/admin/docs/ingest/url">
+        <div class="form-grid">
+          <div class="field field-span-2">
+            <label>URL</label>
+            <input type="text" name="url" placeholder="https://..." required>
+          </div>
+
+          <div class="field field-span-2">
+            <label>Título opcional</label>
+            <input type="text" name="title" placeholder="Si se deja vacío, se intentará detectar">
+          </div>
+
+          <div class="field">
+            <label>Tipo de documento</label>
+            <input type="text" name="document_type" placeholder="guia, faq, tramite...">
+          </div>
+
+          <div class="field">
+            <label>Organismo</label>
+            <input type="text" name="organism" placeholder="eddi">
+          </div>
+
+          <div class="field field-span-2">
+            <label>Tema</label>
+            <input type="text" name="topic" placeholder="inscripciones, requisitos...">
+          </div>
+
+          <div class="field field-span-2">
+            <label>Resumen</label>
+            <textarea name="summary" rows="4"></textarea>
+          </div>
+
+          <div class="field">
+            <label>Publicado</label>
+            <select name="is_published">
+              <option value="true" selected>Sí</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Ingerir URL</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="admin-form-card">
+      <div class="admin-card-head">
+        <h2>Ingestar PDF</h2>
+      </div>
+
+      <form method="post" action="/rag/admin/docs/ingest/pdf" enctype="multipart/form-data">
+        <div class="form-grid">
+          <div class="field field-span-2">
+            <label>Archivo PDF</label>
+            <input type="file" name="pdf_file" accept="application/pdf" required>
+          </div>
+
+          <div class="field field-span-2">
+            <label>Título opcional</label>
+            <input type="text" name="title" placeholder="Si se deja vacío, se usa metadata o nombre del archivo">
+          </div>
+
+          <div class="field field-span-2">
+            <label>URL de referencia</label>
+            <input type="text" name="url" placeholder="https://...">
+          </div>
+
+          <div class="field">
+            <label>Tipo de documento</label>
+            <input type="text" name="document_type" placeholder="pdf, guia, normativa...">
+          </div>
+
+          <div class="field">
+            <label>Organismo</label>
+            <input type="text" name="organism" placeholder="eddi">
+          </div>
+
+          <div class="field field-span-2">
+            <label>Tema</label>
+            <input type="text" name="topic">
+          </div>
+
+          <div class="field field-span-2">
+            <label>Resumen</label>
+            <textarea name="summary" rows="4"></textarea>
+          </div>
+
+          <div class="field">
+            <label>Publicado</label>
+            <select name="is_published">
+              <option value="true" selected>Sí</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Ingerir PDF</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

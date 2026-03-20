@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell">
+  <div class="admin-topbar">
+    <div>
+      <h1>Jobs de ingesta</h1>
+      <p>Historial de procesos ejecutados</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs">Documentos</a>
+      <a class="btn btn-secondary" href="/rag/admin/sources">Fuentes</a>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-head">
+      <h2>Historial</h2>
+      <span class="badge">{{ jobs|length }} jobs</span>
+    </div>
+
+    {% if jobs %}
+    <div class="table-wrap">
+      <table class="table-admin">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Source ID</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Creado</th>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jobs %}
+          <tr>
+            <td>#{{ j.id }}</td>
+            <td>{{ j.source_id or "-" }}</td>
+            <td>{{ j.job_type }}</td>
+            <td>{{ j.status }}</td>
+            <td>{{ j.created_at.strftime("%Y-%m-%d %H:%M:%S") if j.created_at else "-" }}</td>
+            <td>{{ j.started_at.strftime("%Y-%m-%d %H:%M:%S") if j.started_at else "-" }}</td>
+            <td>{{ j.finished_at.strftime("%Y-%m-%d %H:%M:%S") if j.finished_at else "-" }}</td>
+            <td>{{ j.error_text or "-" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No hay jobs registrados.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

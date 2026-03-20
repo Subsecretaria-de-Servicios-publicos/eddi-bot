@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell">
+  <div class="admin-topbar">
+    <div>
+      <h1>Discovery candidates</h1>
+      <p>URLs detectadas y pendientes de decisión</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/sources">Fuentes</a>
+      <a class="btn btn-secondary" href="/rag/admin/docs">Documentos</a>
+    </div>
+  </div>
+
+  <div class="admin-card filters-card">
+    <form class="filters-form filters-form-candidates-advanced" method="get" action="/rag/admin/candidates">
+      <div class="field">
+        <label>Buscar</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Título o URL...">
+      </div>
+
+      <div class="field">
+        <label>Estado visible</label>
+        <select name="status">
+          <option value="" {% if not status %}selected{% endif %}>Solo pendientes (new)</option>
+          <option value="ignored" {% if status == 'ignored' %}selected{% endif %}>Solo ignored</option>
+          <option value="ingested" {% if status == 'ingested' %}selected{% endif %}>Solo ingested</option>
+          <option value="all" {% if status == 'all' %}selected{% endif %}>Todos</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Source ID</label>
+        <select name="source_id">
+          <option value="" {% if not source_id %}selected{% endif %}>Todas</option>
+          {% for sid in source_ids %}
+          <option value="{{ sid }}" {% if source_id == sid %}selected{% endif %}>{{ sid }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filters-actions">
+        <button class="btn btn-primary" type="submit">Filtrar</button>
+        <a class="btn btn-secondary" href="/rag/admin/candidates">Limpiar</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-head">
+      <h2>Candidatos</h2>
+      <span class="badge">{{ items|length }} items</span>
+    </div>
+
+    {% if items %}
+    <div class="table-wrap candidates-table-wrap">
+      <table class="table-admin candidates-table">
+        <thead>
+          <tr>
+            <th class="col-id">ID</th>
+            <th class="col-source">Source ID</th>
+            <th class="col-title">Título</th>
+            <th class="col-url">URL</th>
+            <th class="col-kind">Tipo</th>
+            <th class="col-status">Estado</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in items %}
+          <tr>
+            <td class="col-id">#{{ c.id }}</td>
+            <td class="col-source">{{ c.source_id }}</td>
+            <td class="col-title">{{ c.title or "-" }}</td>
+            <td class="col-url">
+              <div class="url-cell">
+                <a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.url }}</a>
+              </div>
+            </td>
+            <td class="col-kind">{{ c.kind or "-" }}</td>
+            <td class="col-status">
+              {% if c.status == "ignored" %}
+              <span class="meta-pill off">ignored</span>
+              {% elif c.status == "ingested" %}
+              <span class="meta-pill ok">ingested</span>
+              {% else %}
+              <span class="meta-pill">{{ c.status }}</span>
+              {% endif %}
+            </td>
+            <td class="col-actions">
+              <div class="stack-inline candidate-actions">
+                {% if c.status == "new" %}
+                <form method="post" action="/rag/admin/candidates/{{ c.id }}/ignore">
+                  <button class="btn btn-warning" type="submit">Ignorar</button>
+                </form>
+
+                <form method="post" action="/rag/admin/candidates/{{ c.id }}/promote">
+                  <input type="hidden" name="document_type" value="{{ c.kind or 'website' }}">
+                  <input type="hidden" name="organism" value="eddi">
+                  <input type="hidden" name="topic" value="candidate_promoted">
+                  <input type="hidden" name="summary" value="Promovido desde discovery candidate">
+                  <input type="hidden" name="is_published" value="true">
+                  <button class="btn btn-primary" type="submit">Promover</button>
+                </form>
+                {% endif %}
+
+                <form method="post" action="/rag/admin/candidates/{{ c.id }}/delete" onsubmit="return confirm('¿Eliminar este candidate?');">
+                  <button class="btn btn-danger" type="submit">Eliminar</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No hay candidates para mostrar con el filtro actual.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

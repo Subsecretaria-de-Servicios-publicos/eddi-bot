@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell narrow">
+  <div class="admin-topbar">
+    <div>
+      <h1>Nuevo documento</h1>
+      <p>Carga manual para la base documental eddi</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs">Volver</a>
+    </div>
+  </div>
+
+  <form class="admin-form-card" method="post" action="/rag/admin/docs/new">
+    <div class="form-grid">
+      <div class="field field-span-2">
+        <label>Título</label>
+        <input type="text" name="title" required>
+      </div>
+
+      <div class="field field-span-2">
+        <label>URL</label>
+        <input type="text" name="url" placeholder="https://...">
+      </div>
+
+      <div class="field">
+        <label>Tipo de documento</label>
+        <input type="text" name="document_type" placeholder="tramite, faq, instructivo...">
+      </div>
+
+      <div class="field">
+        <label>Organismo</label>
+        <input type="text" name="organism" placeholder="eddi">
+      </div>
+
+      <div class="field field-span-2">
+        <label>Tema</label>
+        <input type="text" name="topic" placeholder="inscripciones, turnos, requisitos...">
+      </div>
+
+      <div class="field field-span-2">
+        <label>Resumen</label>
+        <textarea name="summary" rows="4"></textarea>
+      </div>
+
+      <div class="field field-span-2">
+        <label>Contenido textual</label>
+        <textarea name="content_text" rows="16" required></textarea>
+      </div>
+
+      <div class="field">
+        <label>Publicado</label>
+        <select name="is_published">
+          <option value="true" selected>Sí</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs">Cancelar</a>
+      <button class="btn btn-primary" type="submit">Guardar documento</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

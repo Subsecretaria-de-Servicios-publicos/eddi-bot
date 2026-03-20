@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell">
+  <div class="admin-topbar">
+    <div>
+      <h1>Fuentes eddi</h1>
+      <p>Orígenes configurados para discovery e ingesta</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs">Ir a documentos</a>
+      <a class="btn btn-primary" href="/rag/admin/sources/new">Nueva fuente</a>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-head">
+      <h2>Listado de fuentes</h2>
+      <span class="badge">{{ sources|length }} fuentes</span>
+    </div>
+
+    {% if sources %}
+    <div class="table-wrap">
+      <table class="table-admin">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Base URL</th>
+            <th>Tipo</th>
+            <th>Activa</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sources %}
+          <tr>
+            <td>#{{ s.id }}</td>
+            <td>{{ s.name }}</td>
+            <td>{{ s.base_url or "-" }}</td>
+            <td>{{ s.source_kind }}</td>
+            <td>
+              {% if s.is_active %}
+              <span class="pill ok">Sí</span>
+              {% else %}
+              <span class="pill off">No</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="/rag/admin/sources/{{ s.id }}/toggle">
+                {% if s.is_active %}
+                <button class="btn btn-warning" type="submit">Desactivar</button>
+                {% else %}
+                <button class="btn btn-primary" type="submit">Activar</button>
+                {% endif %}
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No hay fuentes configuradas.</p>
+      <a class="btn btn-primary" href="/rag/admin/sources/new">Crear primera fuente</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

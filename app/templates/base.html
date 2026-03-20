@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}RAG eddi{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/chat.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <link rel="stylesheet" href="/static/css/brand.css">
+  <link rel="icon" type="image/png" href="/static/brand/eddi/logo-eddi-hyvai.png">
+</head>
+<body>
+  {% set current_path = request.url.path if request and request.url else '' %}
+  {% set is_login = current_path == '/rag/admin/login' %}
+  {% set is_admin = current_path.startswith('/rag/admin') if current_path else False %}
+
+  <div class="page-shell">
+    {% if is_admin and not is_login %}
+    <header class="eddi-topbar">
+      <div class="eddi-topbar-inner">
+        <div class="eddi-brand">
+          <img
+            src="/static/brand/eddi/logo-eddi-hyvai.png"
+            alt="Eddi HyV.ai"
+            class="eddi-logo"
+          >
+          <div class="eddi-brand-meta">
+            <div class="eddi-brand-title">RAG eddi</div>
+          </div>
+        </div>
+
+        <nav class="eddi-nav">
+          <a href="/rag/admin">Dashboard</a>
+          <a href="/rag/admin/docs">Docs</a>
+          <a href="/rag/admin/sources">Sources</a>
+          <a href="/rag/admin/candidates">Candidates</a>
+          <a href="/rag/admin/jobs">Jobs</a>
+          <a href="/rag/admin/chats">Chats</a>
+          <a href="/rag/admin/sync">Sync</a>
+          <a href="/">Chat</a>
+          <form method="post" action="/rag/admin/logout" style="margin:0;">
+            <button type="submit">Salir</button>
+          </form>
+        </nav>
+      </div>
+    </header>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

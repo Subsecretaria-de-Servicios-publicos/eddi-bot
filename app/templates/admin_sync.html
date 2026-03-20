@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell">
+  <div class="admin-topbar">
+    <div>
+      <h1>Sync y discovery</h1>
+      <p>Ejecución manual de detección de URLs</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin">Dashboard</a>
+      <a class="btn btn-secondary" href="/rag/admin/candidates">Candidates</a>
+    </div>
+  </div>
+
+  <div class="stack-gap">
+    <div class="admin-card">
+      <div class="admin-card-head">
+        <h2>Sync por fuente</h2>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-admin">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Base URL</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in sources %}
+            <tr>
+              <td>#{{ s.id }}</td>
+              <td>{{ s.name }}</td>
+              <td>{{ s.base_url or "-" }}</td>
+              <td>
+                <form method="post" action="/rag/admin/sync/source/{{ s.id }}">
+                  <button class="btn btn-primary" type="submit">Ejecutar discovery</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="admin-form-card">
+      <div class="admin-card-head">
+        <h2>Importar desde sitemap</h2>
+      </div>
+
+      <form method="post" action="/rag/admin/sync/sitemap">
+        <div class="form-grid">
+          <div class="field field-span-2">
+            <label>Sitemap URL</label>
+            <input type="text" name="sitemap_url" placeholder="https://dominio.com/sitemap.xml" required>
+          </div>
+
+          <div class="field">
+            <label>Source ID</label>
+            <input type="number" name="source_id" required>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Importar sitemap</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

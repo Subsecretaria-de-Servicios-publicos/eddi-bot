@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell">
+  <div class="admin-topbar">
+    <div>
+      <h1>Detalle de sesión</h1>
+      <p>{{ session.session_key }}</p>
+    </div>
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/chats">Volver</a>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-head">
+      <h2>Mensajes</h2>
+      <span class="badge">{{ messages|length }} mensajes</span>
+    </div>
+
+    {% if messages %}
+    <div class="messages-admin-list">
+      {% for m in messages %}
+      <div class="message-admin-card">
+        <div class="message-admin-head">
+          <div>
+            <strong>{{ m.role }}</strong>
+            <span>{{ m.created_at.strftime("%Y-%m-%d %H:%M:%S") if m.created_at else "-" }}</span>
+          </div>
+        </div>
+        <pre class="message-admin-pre">{{ m.message_text }}</pre>
+
+        {% if m.retrieval_json %}
+        <details class="json-box">
+          <summary>retrieval_json</summary>
+          <pre>{{ m.retrieval_json }}</pre>
+        </details>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No hay mensajes en esta sesión.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

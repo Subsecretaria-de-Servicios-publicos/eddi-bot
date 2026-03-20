@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-shell">
+  {% set meta = doc.metadata_json or {} %}
+  {% set low_text_pdf = meta.get("low_text_pdf") %}
+  {% set pdf_has_images = meta.get("pdf_has_images") %}
+  {% set embedded_from_html = meta.get("embedded_from_html") %}
+  {% set embedded_pdf_url = meta.get("embedded_pdf_url") %}
+  {% set landing_url = meta.get("landing_url") %}
+  {% set pdf_page_count = meta.get("pdf_page_count") %}
+  {% set pdf_image_count = meta.get("pdf_image_count") %}
+  {% set extraction_engine = meta.get("extraction_engine") %}
+
+  <div class="admin-topbar">
+    <div>
+      <h1>Detalle del documento</h1>
+      <p>Documento #{{ doc.id }}</p>
+
+      <div class="doc-flags">
+        <span class="meta-pill">{{ doc.document_type or "sin tipo" }}</span>
+        <span class="meta-pill">{{ doc.status }}</span>
+
+        {% if doc.is_published %}
+        <span class="meta-pill ok">Publicado</span>
+        {% else %}
+        <span class="meta-pill off">No publicado</span>
+        {% endif %}
+
+        {% if embedded_from_html %}
+        <span class="meta-pill info">PDF detectado dentro de HTML</span>
+        {% endif %}
+
+        {% if pdf_has_images %}
+        <span class="meta-pill warn">PDF con imágenes</span>
+        {% endif %}
+
+        {% if low_text_pdf %}
+        <span class="meta-pill danger">Requiere OCR</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="admin-actions">
+      <a class="btn btn-secondary" href="/rag/admin/docs">Volver</a>
+      <a class="btn btn-secondary" href="/rag/admin/docs/{{ doc.id }}/edit">Editar</a>
+
+      {% if doc.url %}
+      <form method="post" action="/rag/admin/docs/{{ doc.id }}/reingest">
+        <button class="btn btn-primary" type="submit">Reingestar desde URL</button>
+      </form>
+      {% endif %}
+
+      <form method="post" action="/rag/admin/docs/{{ doc.id }}/reindex">
+        <button class="btn btn-secondary" type="submit">Reindexar embeddings</button>
+      </form>
+
+      {% if doc.is_published %}
+      <form method="post" action="/rag/admin/docs/{{ doc.id }}/unpublish">
+        <button class="btn btn-warning" type="submit">Despublicar</button>
+      </form>
+      {% else %}
+      <form method="post" action="/rag/admin/docs/{{ doc.id }}/publish">
+        <button class="btn btn-primary" type="submit">Publicar</button>
+      </form>
+      {% endif %}
+
+      <form method="post" action="/rag/admin/docs/{{ doc.id }}/delete" onsubmit="return confirm('¿Eliminar este documento?');">
+        <button class="btn btn-danger" type="submit">Eliminar</button>
+      </form>
+    </div>
+  </div>
+
+  {% if low_text_pdf %}
+  <div class="admin-card admin-alert-card danger">
+    <div class="admin-alert-body">
+      <strong>Atención:</strong>
+      este documento fue detectado como <strong>PDF con poco texto extraíble</strong>.
+      Conviene marcarlo para OCR en el próximo bloque.
+    </div>
+  </div>
+  {% elif pdf_has_images %}
+  <div class="admin-card admin-alert-card warning">
+    <div class="admin-alert-body">
+      <strong>Revisión recomendada:</strong>
+      este PDF contiene imágenes. El texto nativo puede alcanzar, pero parte del contenido visual podría no estar entrando al RAG.
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="detail-grid">
+    <div class="admin-card">
+      <div class="admin-card-head">
+        <h2>Metadatos</h2>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-item"><strong>ID</strong><span>{{ doc.id }}</span></div>
+        <div class="meta-item"><strong>Título</strong><span>{{ doc.title }}</span></div>
+        <div class="meta-item"><strong>Slug</strong><span>{{ doc.slug or "-" }}</span></div>
+
+        <div class="meta-item">
+          <strong>URL del documento</strong>
+          <span class="meta-link-wrap">
+            {% if doc.url %}
+            <a href="{{ doc.url }}" target="_blank" rel="noopener noreferrer">{{ doc.url }}</a>
+            {% else %}
+            -
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="meta-item"><strong>Tipo</strong><span>{{ doc.document_type or "-" }}</span></div>
+        <div class="meta-item"><strong>Organismo</strong><span>{{ doc.organism or "-" }}</span></div>
+        <div class="meta-item"><strong>Tema</strong><span>{{ doc.topic or "-" }}</span></div>
+        <div class="meta-item"><strong>Estado</strong><span>{{ doc.status }}</span></div>
+        <div class="meta-item"><strong>Publicado</strong><span>{{ "Sí" if doc.is_published else "No" }}</span></div>
+        <div class="meta-item"><strong>Hash</strong><span class="hash">{{ doc.content_hash or "-" }}</span></div>
+      </div>
+    </div>
+
+    <div class="admin-card">
+      <div class="admin-card-head">
+        <h2>Resumen</h2>
+      </div>
+      <div class="content-block">{{ doc.summary or "Sin resumen." }}</div>
+    </div>
+
+    <div class="admin-card detail-span-2">
+      <div class="admin-card-head">
+        <h2>Diagnóstico de extracción</h2>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <strong>Landing URL</strong>
+          <span class="meta-link-wrap">
+            {% if landing_url %}
+            <a href="{{ landing_url }}" target="_blank" rel="noopener noreferrer">{{ landing_url }}</a>
+            {% else %}
+            -
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="meta-item">
+          <strong>PDF detectado</strong>
+          <span class="meta-link-wrap">
+            {% if embedded_pdf_url %}
+            <a href="{{ embedded_pdf_url }}" target="_blank" rel="noopener noreferrer">{{ embedded_pdf_url }}</a>
+            {% else %}
+            -
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="meta-item"><strong>Embebido desde HTML</strong><span>{{ "Sí" if embedded_from_html else "No" }}</span></div>
+        <div class="meta-item"><strong>Motor de extracción</strong><span>{{ extraction_engine or "-" }}</span></div>
+        <div class="meta-item"><strong>Páginas PDF</strong><span>{{ pdf_page_count if pdf_page_count is not none else "-" }}</span></div>
+        <div class="meta-item"><strong>Imágenes detectadas</strong><span>{{ pdf_image_count if pdf_image_count is not none else "-" }}</span></div>
+        <div class="meta-item"><strong>PDF con imágenes</strong><span>{{ "Sí" if pdf_has_images else "No" }}</span></div>
+        <div class="meta-item"><strong>Low text PDF</strong><span>{{ "Sí" if low_text_pdf else "No" }}</span></div>
+      </div>
+    </div>
+
+    <div class="admin-card detail-span-2">
+      <div class="admin-card-head">
+        <h2>Contenido</h2>
+        <span class="badge">{{ (doc.content_text or "")|length }} chars</span>
+      </div>
+      <pre class="content-pre">{{ doc.content_text or "" }}</pre>
+    </div>
+
+    <div class="admin-card detail-span-2">
+      <div class="admin-card-head">
+        <h2>Chunks generados</h2>
+        <span class="badge">{{ chunks|length }} chunks</span>
+      </div>
+
+      {% if chunks %}
+      <div class="chunks-list">
+        {% for c in chunks %}
+        <div class="chunk-card">
+          <div class="chunk-head">
+            <span>Chunk {{ c.chunk_index }}</span>
+            <span>{{ c.char_count or 0 }} chars</span>
+          </div>
+          <pre class="chunk-pre">{{ c.chunk_text }}</pre>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <p>No hay chunks generados.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
