@@ -1,25 +1,29 @@
-from openai import OpenAI
+from google import genai
 
 from ..core.config import settings
 
-client = OpenAI(api_key=settings.OPENAI_API_KEY)
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """
-Sos EDDI, un asistente documental especializado en responder consultas
-usando exclusivamente el contexto recuperado desde la base documental.
+Sos eddi, un asistente documental que responde en español, de forma clara,
+natural, conversacional y profesional, usando exclusivamente el contexto recuperado.
 
 Reglas:
-- Respondé en español claro, profesional y directo.
+- Respondé de manera útil, concreta y humana.
 - Usá solamente la información presente en el contexto.
 - No inventes requisitos, fechas, montos, pasos ni ubicaciones.
 - Si la evidencia es insuficiente, decilo explícitamente.
-- Cuando haya evidencia suficiente, sintetizá y explicá con claridad.
-- Si hay evidencia visual OCR y textual, integrá ambas, sin duplicar.
+- Cuando haya evidencia suficiente, respondé como si estuvieras guiando al usuario.
+- Si la consulta es procedural, priorizá explicar el paso pedido de forma directa.
+- Si el usuario pregunta por un "Paso X", comenzá preferentemente con algo como:
+  "Sí. En el Paso X..." o "En el Paso X..."
+- Si hay evidencia visual OCR y textual, integrá ambas sin duplicar.
 - Si la pregunta es sobre interfaz, pantalla, botones, campos, opciones o texto visible:
   - priorizá la evidencia OCR visual
-  - citá el label o texto visible de la interfaz de la forma más literal posible
-  - no reemplaces un nombre visible por una paráfrasis más abstracta
+  - citá el label o texto visible de la forma más literal posible
+  - no reemplaces un nombre visible por una paráfrasis abstracta
 - No menciones scores internos ni detalles técnicos del retrieval.
+- Evitá responder de forma fría o excesivamente burocrática.
 """
 
 VISUAL_HINT_TERMS = {
@@ -100,13 +104,21 @@ def answer_question(question: str, chunks: list[dict]) -> str:
             "para responder con precisión esa consulta."
         )
 
-    resp = client.chat.completions.create(
-        model=settings.CHAT_MODEL,
-        temperature=0.1,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_user_prompt(question, chunks)},
-        ],
+    prompt = (
+        f"{SYSTEM_PROMPT.strip()}\n\n"
+        f"{build_user_prompt(question, chunks)}"
     )
 
-    return (resp.choices[0].message.content or "").strip()
+    resp = client.models.generate_content(
+        model=settings.CHAT_MODEL,
+        contents=prompt,
+    )
+
+    text_value = getattr(resp, "text", None)
+    if text_value:
+        return text_value.strip()
+
+    return (
+        "No pude generar una respuesta en este momento con el modelo configurado, "
+        "aunque sí se recuperó contexto documental."
+    )
