@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..models import Document, DocumentChunk, DocumentImage, DocumentStatus
 from .normalizer import slugify, normalize_text
 from .chunker import chunk_text
-from .embedder import embed_text
+from .embedder import embed_document
 from .extractor import extract_text_from_url, extract_text_from_pdf_bytes
 from .pdf_image_extractor import extract_visual_pages_from_pdf_bytes, delete_visual_assets_for_document
 
@@ -108,7 +108,7 @@ def create_chunks_for_document(db: Session, doc: Document, text: str, with_embed
 
     for ch in chunks:
         chunk_text_value = ch["chunk_text"]
-        emb = embed_text(chunk_text_value) if with_embeddings else None
+        emb = embed_document(chunk_text_value, title=doc.title) if with_embeddings else None
 
         row = DocumentChunk(
             document_id=doc.id,
@@ -138,7 +138,7 @@ def create_visual_rows_for_document(
 
     for item in items:
         ocr_text = normalize_text(item.get("ocr_text") or "")
-        emb = embed_text(ocr_text) if len(ocr_text) >= 30 else None
+        emb = embed_document(ocr_text, title=doc.title) if len(ocr_text) >= 30 else None
 
         row = DocumentImage(
             document_id=doc.id,
@@ -426,7 +426,7 @@ def reindex_document_embeddings(db: Session, doc_id: int) -> int:
     for row in visual_rows:
         text_value = normalize_text(row.ocr_text or "")
         row.char_count = len(text_value) if text_value else 0
-        row.embedding = embed_text(text_value) if len(text_value) >= 30 else None
+        row.embedding = embed_document(text_value, title=doc.title) if len(text_value) >= 30 else None
 
     db.commit()
     return total

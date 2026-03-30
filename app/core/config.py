@@ -9,9 +9,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
 
-    OPENAI_API_KEY: str = ""
-    CHAT_MODEL: str = "gpt-4.1-mini"
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    GEMINI_API_KEY: str = ""
+    CHAT_MODEL: str = "gemini-2.5-flash"
+    EMBEDDING_MODEL: str = "text-embedding-004"
 
     ADMIN_TOKEN: str = "CAMBIAR_TOKEN_ADMIN"
     ADMIN_USERNAME: str = "admin"

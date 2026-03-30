@@ -21,3 +21,4 @@ gunicorn
 pymupdf
 pillow
 pytesseract
+google-genai

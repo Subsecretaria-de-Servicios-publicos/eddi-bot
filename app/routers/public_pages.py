@@ -12,7 +12,11 @@ router = APIRouter(tags=["public-pages"])
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    return templates.TemplateResponse("chat.html", {"request": request})
+    return templates.TemplateResponse(
+    request,
+    "chat.html",
+    {"request": request},
+)
 
 
 @router.get("/rag/eddi/embed.js")
