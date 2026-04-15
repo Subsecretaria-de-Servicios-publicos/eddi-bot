@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str = ""
     CHAT_MODEL: str = "gemini-2.5-flash"
-    EMBEDDING_MODEL: str = "text-embedding-004"
+    EMBEDDING_MODEL: str = "text-embedding-001"
 
     ADMIN_TOKEN: str = "CAMBIAR_TOKEN_ADMIN"
     ADMIN_USERNAME: str = "admin"
@@ -23,7 +23,11 @@ class Settings(BaseSettings):
     RAG_CHUNK_SIZE: int = 1000
     RAG_CHUNK_OVERLAP: int = 120
 
-    CORS_ORIGINS: str = "*"
+    CORS_ORIGINS: str = "http://127.0.0.1:8000,http://localhost:8000"
+    CORS_ALLOW_CREDENTIALS: bool = True
+    CORS_ALLOW_METHODS: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    CORS_ALLOW_HEADERS: str = "Authorization,Content-Type,X-Requested-With"
+    SECURITY_HEADERS_ENABLED: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

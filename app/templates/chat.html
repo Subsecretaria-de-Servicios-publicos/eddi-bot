@@ -14,7 +14,7 @@
           class="chat-topbar-logo"
         >
         <div class="chat-topbar-text">
-          <strong>eddi</strong>
+          <strong>eddibot</strong>
           <span>Asistente documental inteligente</span>
         </div>
       </div>
@@ -29,43 +29,16 @@
 
     <section class="chat-layout">
 
-      <aside class="chat-sidebar">
-        <div class="side-card red-soft">
-          <h3>Asistente</h3>
-          <p>
-            Esta instancia utiliza recuperación semántica con ranking híbrido y puede responder usando
-            documentos publicados de la base.
-          </p>
-        </div>
-
-        <div class="side-card">
-          <h3>Filtros opcionales</h3>
-
-          <div class="filter-field">
-            <label for="filter-document-type">Tipo</label>
-            <input id="filter-document-type" type="text" placeholder="guía, trámite, faq...">
-          </div>
-
-          <div class="filter-field">
-            <label for="filter-organism">Organismo</label>
-            <input id="filter-organism" type="text" placeholder="organismo">
-          </div>
-
-          <div class="filter-field">
-            <label for="filter-topic">Tema</label>
-            <input id="filter-topic" type="text" placeholder="tema">
-          </div>
-        </div>
-      </aside>
-
-      <main class="chat-main">
+      <main class="chat-main" style="width:100%;">
         <div id="chat-messages" class="chat-messages">
           <div class="msg-row assistant">
             <div class="msg-bubble assistant-bubble">
-              <div class="msg-role">EDDI</div>
+              <div class="msg-role">eddibot</div>
               <div class="msg-text">
-                Hola. Ya estoy operativo con recuperación documental. Podés consultar libremente
-                o usar filtros para acotar por tipo, organismo o tema.
+                Hola soy eddibot! Podés consultar libremente
+                cualquier información tecnica relevante de la plataforma eddi.
+                <ul>
+
               </div>
             </div>
           </div>
@@ -91,19 +64,55 @@
   </div>
 </div>
 
+<style>
+  .chat-layout {
+    display: flex;
+    flex-direction: row;
+    /* Elimina el espacio reservado para el aside */
+  }
+  .chat-main {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+  /* Puedes eliminar o comentar cualquier regla relacionada con .chat-sidebar */
+  /* ...el resto del CSS igual... */
+  .source-pdf-item {
+    margin-bottom: 8px;
+  }
+
+  .source-pdf-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .source-pdf-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #b80f1f;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .source-pdf-name {
+    text-decoration: underline;
+  }
+</style>
+
 <script>
   const messagesEl = document.getElementById("chat-messages");
   const inputEl = document.getElementById("chat-input");
   const sendEl = document.getElementById("chat-send");
   const sourcesEl = document.getElementById("chat-sources");
 
-  const filterDocumentTypeEl = document.getElementById("filter-document-type");
-  const filterOrganismEl = document.getElementById("filter-organism");
-  const filterTopicEl = document.getElementById("filter-topic");
-
   let sessionKey = localStorage.getItem("eddi_session_key") || "";
   let sending = false;
-  let lastQuestionText = "";
 
   function scrollToBottom() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -163,87 +172,13 @@
     return out;
   }
 
-  function tokenizeQuestion(text) {
-    return String(text || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9ñ\s]/g, " ")
-      .split(/\s+/)
-      .filter(Boolean);
-  }
-
-  function scoreVisualSourceForQuestion(src, question) {
-    const qTokens = tokenizeQuestion(question);
-    const haystack = [
-      src.title || "",
-      src.snippet || "",
-      src.document_type || ""
-    ]
-      .join(" ")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-    let score = 0;
-
-    for (const token of qTokens) {
-      if (token.length < 3) continue;
-      if (haystack.includes(token)) score += 3;
-    }
-
-    if (haystack.includes("firmar")) score += 4;
-    if (haystack.includes("contraseña")) score += 4;
-    if (haystack.includes("contrasena")) score += 4;
-    if (haystack.includes("certificado")) score += 4;
-    if (haystack.includes("seleccionar")) score += 3;
-    if (haystack.includes("boton")) score += 2;
-    if (haystack.includes("botón")) score += 2;
-    if (haystack.includes("panel")) score += 1;
-    if (haystack.includes("pantalla")) score += 1;
-
-    return score;
-  }
-
-  function pickPrimaryVisualSource(sources, questionText) {
-    const visuals = (sources || []).filter(
-      src => src.content_kind === "image_ocr" && src.image_path
-    );
-
-    if (!visuals.length) return null;
-
-    const ranked = visuals
-      .map(src => ({
-        ...src,
-        __ui_score: scoreVisualSourceForQuestion(src, questionText)
-      }))
-      .sort((a, b) => {
-        if (b.__ui_score !== a.__ui_score) return b.__ui_score - a.__ui_score;
-        return (b.similarity || 0) - (a.similarity || 0);
-      });
-
-    return ranked[0];
-  }
-
-  function pickCompactSources(sources, primaryVisual) {
+  function pickCompactSources(sources) {
     const filtered = [];
 
     for (const src of sources || []) {
-      // no repetir la visual principal
-      if (
-        primaryVisual &&
-        src.content_kind === "image_ocr" &&
-        src.image_path === primaryVisual.image_path &&
-        src.page_number === primaryVisual.page_number
-      ) {
-        continue;
-      }
-
-      // excluir otras OCR visuales secundarias
       if (src.content_kind === "image_ocr") {
         continue;
       }
-
       filtered.push(src);
     }
 
@@ -256,50 +191,12 @@
     if (!sources || !sources.length) return;
 
     const normalized = dedupeSources(sources);
-    const primaryVisual = pickPrimaryVisualSource(
-      normalized,
-      inputEl.value || lastQuestionText || ""
-    );
-    const compactSources = pickCompactSources(normalized, primaryVisual);
+    const compactSources = pickCompactSources(normalized);
 
     const title = document.createElement("div");
     title.className = "sources-title";
     title.textContent = "Fuentes consultadas";
     sourcesEl.appendChild(title);
-
-    if (primaryVisual) {
-      const visualCard = document.createElement("div");
-      visualCard.className = "source-visual-card";
-
-      visualCard.innerHTML = `
-        <div class="source-visual-head">
-          <div>
-            <div class="source-visual-title">Vista relacionada</div>
-            <div class="source-visual-meta">
-              ${escapeHtml(primaryVisual.title || "Documento")}
-              ${primaryVisual.page_number ? ` · pág. ${escapeHtml(primaryVisual.page_number)}` : ""}
-            </div>
-          </div>
-          <span class="source-kind source-kind-visual">OCR visual</span>
-        </div>
-
-        <a href="${primaryVisual.image_path}" target="_blank" rel="noopener" class="source-visual-link">
-          <img
-            src="${primaryVisual.image_path}"
-            alt="Vista OCR relacionada"
-            class="source-visual-image"
-            loading="lazy"
-          >
-        </a>
-
-        <div class="source-visual-actions">
-          ${primaryVisual.url ? `<a href="${primaryVisual.url}" target="_blank" rel="noopener">Abrir fuente</a>` : ""}
-          <a href="${primaryVisual.image_path}" target="_blank" rel="noopener">Abrir página completa</a>
-        </div>
-      `;
-
-      sourcesEl.appendChild(visualCard);
-    }
 
     if (compactSources.length) {
       const list = document.createElement("div");
@@ -307,29 +204,23 @@
 
       compactSources.forEach(src => {
         const item = document.createElement("div");
-        item.className = "source-item compact";
-
-        const kindBadge =
-          src.content_kind === "image_ocr"
-            ? `<span class="source-kind source-kind-visual">OCR visual</span>`
-            : `<span class="source-kind source-kind-text">Texto</span>`;
-
-        const pageMeta =
-          src.content_kind === "image_ocr" && src.page_number
-            ? `<span class="source-page">pág. ${escapeHtml(src.page_number)}</span>`
-            : "";
+        item.className = "source-item compact source-pdf-item";
 
         item.innerHTML = `
           <div class="source-head">
-            <div class="source-title">${escapeHtml(src.title || "Documento")}</div>
-            <div class="source-badges">
-              ${kindBadge}
-              ${pageMeta}
+            <div class="source-title">
+              ${
+                src.url
+                  ? `
+                    <a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer" class="source-pdf-link">
+                      <span class="source-pdf-badge">PDF</span>
+                      <span class="source-pdf-name">${escapeHtml(src.title || "Abrir PDF")}</span>
+                    </a>
+                  `
+                  : `${escapeHtml(src.title || "Documento")}`
+              }
             </div>
           </div>
-          <div class="source-meta">${escapeHtml(src.document_type || "")}</div>
-          ${src.snippet ? `<div class="source-snippet">${escapeHtml(src.snippet)}</div>` : ""}
-          ${src.url ? `<div class="source-extra"><a href="${src.url}" target="_blank" rel="noopener">Abrir fuente</a></div>` : ""}
         `;
 
         list.appendChild(item);
@@ -345,7 +236,6 @@
 
     sending = true;
     sendEl.disabled = true;
-    lastQuestionText = text;
 
     addMessage("user", text);
     inputEl.value = "";
@@ -363,9 +253,9 @@
           message: text,
           session_key: sessionKey || null,
           channel: "web",
-          document_type: filterDocumentTypeEl?.value?.trim() || null,
-          organism: filterOrganismEl?.value?.trim() || null,
-          topic: filterTopicEl?.value?.trim() || null
+          document_type: null,
+          organism: null,
+          topic: null
         })
       });
 

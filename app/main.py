@@ -1,12 +1,14 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from .core.config import settings
 from .db import Base, engine
+from .middlewares.security_headers import SecurityHeadersMiddleware
 from .routers.health import router as health_router
 from .routers.public_chat import router as public_chat_router
 from .routers.public_pages import router as public_pages_router
@@ -23,23 +25,67 @@ from .routers.admin_metrics import router as admin_metrics_router
 from .routers.admin_sync import router as admin_sync_router
 from .routers.n8n_webhooks import router as n8n_webhooks_router
 
+
 # Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title=settings.APP_NAME)
+
+def _split_csv(value: str, default: list[str] | None = None) -> list[str]:
+    if not value:
+        return default or []
+    items = [x.strip() for x in value.split(",") if x.strip()]
+    return items or (default or [])
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    debug=(settings.APP_ENV or "").lower() == "development",
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET_KEY)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SESSION_SECRET_KEY,
+)
 
-origins = [x.strip() for x in settings.CORS_ORIGINS.split(",")] if settings.CORS_ORIGINS else ["*"]
+cors_origins = _split_csv(
+    getattr(settings, "CORS_ORIGINS", ""),
+    default=["http://127.0.0.1:8000", "http://localhost:8000"],
+)
+
+cors_allow_methods = _split_csv(
+    getattr(settings, "CORS_ALLOW_METHODS", ""),
+    default=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+
+cors_allow_headers = _split_csv(
+    getattr(settings, "CORS_ALLOW_HEADERS", ""),
+    default=["Authorization", "Content-Type", "X-Requested-With"],
+)
+
+allow_credentials_raw = str(getattr(settings, "CORS_ALLOW_CREDENTIALS", "true")).strip().lower()
+cors_allow_credentials = allow_credentials_raw in {"1", "true", "yes", "on"}
+
+# Evita configuración insegura/inválida: allow_credentials=True con "*"
+if cors_allow_credentials and "*" in cors_origins:
+    cors_origins = ["http://127.0.0.1:8000", "http://localhost:8000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_origins,
+    allow_credentials=cors_allow_credentials,
+    allow_methods=cors_allow_methods,
+    allow_headers=cors_allow_headers,
 )
+
+security_headers_enabled_raw = str(
+    getattr(settings, "SECURITY_HEADERS_ENABLED", "true")
+).strip().lower()
+security_headers_enabled = security_headers_enabled_raw in {"1", "true", "yes", "on"}
+
+if security_headers_enabled:
+    app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(health_router)
 app.include_router(public_pages_router)

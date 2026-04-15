@@ -61,6 +61,17 @@ def build_crop_for_source(db: Session, source_item: dict, question: str) -> str 
     return "/" + crop_rel.replace("\\", "/")
 
 
+def _normalize_answer_result(result) -> tuple[str, bool, str | None]:
+    if isinstance(result, dict):
+        answer = str(result.get("answer") or "").strip()
+        fallback_used = bool(result.get("fallback_used", False))
+        model_used = result.get("model_used")
+        return answer, fallback_used, model_used
+
+    answer = str(result or "").strip()
+    return answer, False, None
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest, db: Session = Depends(get_db)):
     session_key = payload.session_key or str(uuid4())
@@ -74,40 +85,101 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
         db.add(session)
         db.flush()
 
-    retrieved = retrieve_chunks(
-        db,
-        payload.message,
-        document_type=payload.document_type,
-        organism=payload.organism,
-        topic=payload.topic,
-    )
+    try:
+        retrieved = retrieve_chunks(
+            db,
+            payload.message,
+            document_type=payload.document_type,
+            organism=payload.organism,
+            topic=payload.topic,
+        )
+        print("DEBUG chat question:", payload.message)
+        print("DEBUG retrieved count:", len(retrieved))
+        for i, r in enumerate(retrieved[:5], start=1):
+            print(
+                "DEBUG chunk",
+                i,
+                {
+                    "title": r.get("title"),
+                    "content_kind": r.get("content_kind"),
+                    "final_score": r.get("final_score"),
+                    "document_id": r.get("document_id"),
+                }
+            )
+    except Exception as e:
+        print("DEBUG retrieve_chunks error:", repr(e))
+        db.rollback()
 
-    answer = answer_question(payload.message, retrieved)
+        session = db.query(ChatSession).filter(ChatSession.session_key == session_key).first()
+        if not session:
+            session = ChatSession(
+                session_key=session_key,
+                channel=payload.channel or "web",
+            )
+            db.add(session)
+            db.flush()
 
-    db.add(ChatMessage(
-        session_id=session.id,
-        role="user",
-        message_text=payload.message,
-        retrieval_json={
-            "filters": {
-                "document_type": payload.document_type,
-                "organism": payload.organism,
-                "topic": payload.topic,
-            }
-        }
-    ))
+        retrieved = []
 
-    db.add(ChatMessage(
-        session_id=session.id,
-        role="assistant",
-        message_text=answer,
-        retrieval_json={
-            "chunks": retrieved,
-            "used_chunks": len(retrieved),
-        }
-    ))
+    fallback_used = False
+    model_used = None
 
-    db.commit()
+    try:
+        result = answer_question(payload.message, retrieved)
+        answer, fallback_used, model_used = _normalize_answer_result(result)
+
+        if not answer:
+            answer = "No encontré una respuesta clara en este momento con el contexto disponible."
+            fallback_used = True
+            if not model_used:
+                model_used = "empty_answer_fallback"
+
+    except Exception as e:
+        print("DEBUG answer_question error:", repr(e))
+        answer = "Ocurrió un error al generar la respuesta en este momento."
+        fallback_used = True
+        model_used = "router_exception_fallback"
+
+    user_retrieval_json = {
+        "filters": {
+            "document_type": payload.document_type,
+            "organism": payload.organism,
+            "topic": payload.topic,
+        },
+        "message": payload.message,
+        "session_key": session_key,
+    }
+
+    assistant_retrieval_json = {
+        "chunks": retrieved,
+        "used_chunks": len(retrieved),
+        "meta": {
+            "fallback_used": fallback_used,
+            "model_used": model_used,
+            "retrieved_count": len(retrieved),
+        },
+    }
+
+    try:
+        db.add(ChatMessage(
+            session_id=session.id,
+            role="user",
+            message_text=payload.message,
+            retrieval_json=user_retrieval_json,
+        ))
+
+        db.add(ChatMessage(
+            session_id=session.id,
+            role="assistant",
+            message_text=answer,
+            retrieval_json=assistant_retrieval_json,
+        ))
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
 
     sources = []
     seen = set()
@@ -138,7 +210,12 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
             crop_path=crop_path,
         ))
 
-    confidence = "high" if len(retrieved) >= 4 else "medium" if len(retrieved) >= 2 else "low"
+    if len(retrieved) >= 4:
+        confidence = "high"
+    elif len(retrieved) >= 2:
+        confidence = "medium"
+    else:
+        confidence = "low"
 
     return ChatResponse(
         answer=answer,
