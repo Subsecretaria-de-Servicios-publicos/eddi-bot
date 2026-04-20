@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -59,7 +62,7 @@ ACTION_ALIASES = {
     "eliminar": {"eliminar", "eliminacion", "eliminación", "borrar", "elimino", "elimina"},
     "crear": {
         "crear", "creacion", "creación",
-        "generar", "genero", "genera", "generar",
+        "generar", "genero", "genera",
         "alta", "nuevo", "nueva",
     },
     "agregar": {"agregar", "agregado", "adjuntar", "sumar"},
@@ -123,7 +126,7 @@ def extract_query_variants(question: str) -> list[str]:
             if candidate not in variants:
                 variants.append(candidate)
 
-    return variants[:5]
+    return variants[:2]
 
 
 def _query_terms(question: str) -> list[str]:
@@ -326,6 +329,7 @@ def _distinctive_title_bonus(question: str, title: str | None) -> float:
 
     return 1.0
 
+
 def _exact_title_phrase_bonus(question: str, title: str | None) -> float:
     if not title:
         return 1.0
@@ -383,6 +387,7 @@ def _focus_conflict_penalty(question: str, title: str | None, chunk_text: str) -
             penalty = min(penalty, 0.82)
 
     return penalty
+
 
 def _secondary_action_penalty(question: str, title: str | None, chunk_text: str) -> float:
     actions = _extract_action_terms(question)
@@ -522,35 +527,11 @@ def _retrieve_visual_rows(
     organism: str | None,
     topic: str | None,
 ):
-    filters_sql, filter_params = _build_common_filters(document_type, organism, topic)
-
-    sql = f"""
-        SELECT
-            di.id,
-            di.document_id,
-            di.page_number AS chunk_index,
-            di.ocr_text AS chunk_text,
-            di.char_count,
-            di.score_boost,
-            d.title,
-            d.url,
-            d.document_type,
-            d.organism,
-            d.topic,
-            'image_ocr' AS content_kind,
-            di.page_number AS page_number,
-            di.image_path AS image_path,
-            1 - (di.embedding <=> CAST(:embedding AS vector)) AS similarity
-        FROM document_images di
-        JOIN documents d ON d.id = di.document_id
-        WHERE d.is_published = true
-          AND di.embedding IS NOT NULL
-          {filters_sql}
-        ORDER BY di.embedding <=> CAST(:embedding AS vector)
-        LIMIT :top_k
-    """
-    params = {"embedding": emb_str, "top_k": max(top_k * 4, 20), **filter_params}
-    return db.execute(text(sql), params).mappings().all()
+    # Desactivado temporalmente para estabilizar el sistema.
+    # document_images puede mantenerse poblada por la ingesta,
+    # pero no se usa en retrieval hasta cerrar completamente
+    # la migración y validación visual.
+    return []
 
 
 def _retrieve_text_rows_keyword_only(
@@ -977,6 +958,23 @@ def _retrieve_for_single_query(
         )
         return _rescore_keyword_rows(question, keyword_rows, semantic_query)
 
+    if len(query_embedding) != settings.VECTOR_DIMENSION:
+        logger.warning(
+            "Embedding con dimensión incompatible para búsqueda vectorial. "
+            "Esperada=%s, recibida=%s. Se usa fallback textual.",
+            settings.VECTOR_DIMENSION,
+            len(query_embedding),
+        )
+        keyword_rows = _retrieve_text_rows_keyword_only(
+            db,
+            question=question,
+            top_k=top_k,
+            document_type=document_type,
+            organism=organism,
+            topic=topic,
+        )
+        return _rescore_keyword_rows(question, keyword_rows, semantic_query)
+
     emb_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
 
     try:
@@ -998,7 +996,8 @@ def _retrieve_for_single_query(
             topic=topic,
         )
     except Exception as e:
-        print("DEBUG vector retrieval fallback:", repr(e))
+        logger.warning("Vector retrieval fallback activado. Error: %r", e)
+        db.rollback()
         keyword_rows = _retrieve_text_rows_keyword_only(
             db,
             question=question,

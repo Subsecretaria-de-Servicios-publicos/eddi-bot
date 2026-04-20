@@ -15,7 +15,12 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def find_existing_document(db: Session, *, url: str | None = None, content_hash: str | None = None) -> Document | None:
+def find_existing_document(
+    db: Session,
+    *,
+    url: str | None = None,
+    content_hash: str | None = None,
+) -> Document | None:
     if url:
         doc = db.query(Document).filter(Document.url == url).first()
         if doc:
@@ -102,13 +107,18 @@ def clear_document_images(db: Session, doc_id: int):
     delete_visual_assets_for_document(doc_id)
 
 
-def create_chunks_for_document(db: Session, doc: Document, text: str, with_embeddings: bool = True) -> int:
+def create_chunks_for_document(
+    db: Session,
+    doc: Document,
+    text: str,
+    with_embeddings: bool = True,
+) -> int:
     chunks = chunk_text(text)
     total = 0
 
     for ch in chunks:
         chunk_text_value = ch["chunk_text"]
-        emb = embed_document(chunk_text_value, title=doc.title) if with_embeddings else None
+        emb = embed_document(chunk_text_value) if with_embeddings else None
 
         row = DocumentChunk(
             document_id=doc.id,
@@ -138,7 +148,8 @@ def create_visual_rows_for_document(
 
     for item in items:
         ocr_text = normalize_text(item.get("ocr_text") or "")
-        emb = embed_document(ocr_text, title=doc.title) if len(ocr_text) >= 30 else None
+        #emb = embed_document(ocr_text) if len(ocr_text) >= 30 else None
+        emb = None
 
         row = DocumentImage(
             document_id=doc.id,
@@ -266,12 +277,22 @@ def sync_visual_ocr_for_document(
         meta["visual_ocr_items"] = total
         doc.metadata_json = meta
     except Exception as e:
-        meta = dict(doc.metadata_json or {})
+        db.rollback()
+
+        fresh_doc = db.query(Document).filter(Document.id == doc.id).first()
+        if fresh_doc is None:
+            raise
+
+        meta = dict(fresh_doc.metadata_json or {})
         meta["visual_ocr_ready"] = False
         meta["visual_ocr_error"] = str(e)
         meta["visual_pages_count"] = 0
         meta["visual_ocr_items"] = 0
-        doc.metadata_json = meta
+        fresh_doc.metadata_json = meta
+
+        db.commit()
+        db.refresh(fresh_doc)
+        return fresh_doc
 
     db.commit()
     db.refresh(doc)
@@ -292,7 +313,7 @@ def ingest_document_from_url(
 ):
     extracted = extract_text_from_url(url)
 
-    detected_title = extracted.get("title") or title or "Documento desde URL"
+    detected_title = title or extracted.get("title") or "Documento desde URL"
     content_text = extracted.get("content_text") or ""
     final_url = extracted.get("url") or url
     metadata_json = extracted.get("metadata") or {}
@@ -426,7 +447,7 @@ def reindex_document_embeddings(db: Session, doc_id: int) -> int:
     for row in visual_rows:
         text_value = normalize_text(row.ocr_text or "")
         row.char_count = len(text_value) if text_value else 0
-        row.embedding = embed_document(text_value, title=doc.title) if len(text_value) >= 30 else None
+        row.embedding = embed_document(text_value) if len(text_value) >= 30 else None
 
     db.commit()
     return total

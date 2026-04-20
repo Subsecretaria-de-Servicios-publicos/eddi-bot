@@ -129,7 +129,7 @@ class DocumentChunk(Base):
     metadata_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
 
     if VECTOR_AVAILABLE:
-        embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+        embedding: Mapped[list[float] | None] = mapped_column(Vector(3072), nullable=True)
     else:
         embedding: Mapped[list[float] | None] = mapped_column(JSON, default=None)
 
@@ -156,7 +156,7 @@ class DocumentImage(Base):
     metadata_json: Mapped[dict | None] = mapped_column(JSON, default=dict)
 
     if VECTOR_AVAILABLE:
-        embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+        embedding: Mapped[list[float] | None] = mapped_column(Vector(3072), nullable=True)
     else:
         embedding: Mapped[list[float] | None] = mapped_column(JSON, default=None)
 

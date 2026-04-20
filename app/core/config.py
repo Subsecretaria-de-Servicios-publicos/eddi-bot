@@ -11,7 +11,8 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str = ""
     CHAT_MODEL: str = "gemini-2.5-flash"
-    EMBEDDING_MODEL: str = "text-embedding-001"
+    EMBEDDING_MODEL: str = "gemini-embedding-001"
+    VECTOR_DIMENSION: int = 3072
 
     ADMIN_TOKEN: str = "CAMBIAR_TOKEN_ADMIN"
     ADMIN_USERNAME: str = "admin"

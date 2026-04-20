@@ -1,5 +1,4 @@
 import logging
-import time
 import re
 
 from google import genai
@@ -676,96 +675,81 @@ Instrucciones de respuesta:
         temperature=0.2,
     )
 
-    last_error = None
-
-    for attempt in range(3):
-        try:
-            resp = client.models.generate_content(
-                model=settings.CHAT_MODEL,
-                contents=user_prompt,
-                config=config,
-            )
-
-            answer = _clean_final_answer(_extract_text(resp))
-            if _is_procedural_question(question):
-                answer = _format_procedural_answer(answer)
-            answer = _polish_final_answer(answer)
-
-            if answer:
-                if _model_answer_conflicts_with_context(answer, question, context_items):
-                    fallback = _generic_fallback_answer(question, context_items)
-                    if fallback:
-                        return _result(
-                            fallback,
-                            fallback_used=True,
-                            model_used="generic_fallback_after_conflicting_model_answer",
-                        )
-
-                return _result(
-                    answer,
-                    fallback_used=False,
-                    model_used=settings.CHAT_MODEL,
-                )
-
-            logger.warning("Gemini respondió sin texto utilizable.")
-
-            fallback = _generic_fallback_answer(question, context_items)
-            if fallback:
-                return _result(
-                    fallback,
-                    fallback_used=True,
-                    model_used="generic_fallback_empty_model_answer",
-                )
-
-            return _result(
-                "No encontré una respuesta clara en este momento con el contexto disponible.",
-                fallback_used=True,
-                model_used="empty_model_answer_no_fallback",
-            )
-
-        except Exception as e:
-            last_error = e
-            error_text = str(e)
-
-            if "503" in error_text or "UNAVAILABLE" in error_text or "high demand" in error_text.lower():
-                wait_seconds = attempt + 1
-                logger.warning(
-                    "Gemini saturado al responder (intento %s/3). Reintentando en %s s. Error: %s",
-                    attempt + 1,
-                    wait_seconds,
-                    error_text,
-                )
-                time.sleep(wait_seconds)
-                continue
-
-            logger.exception("Error respondiendo con Gemini: %s", error_text)
-
-            fallback = _generic_fallback_answer(question, context_items)
-            if fallback:
-                return _result(
-                    fallback,
-                    fallback_used=True,
-                    model_used="generic_fallback_after_model_exception",
-                )
-
-            return _result(
-                "Ocurrió un error al generar la respuesta en este momento.",
-                fallback_used=True,
-                model_used="model_exception",
-            )
-
-    logger.error("Gemini no respondió tras los reintentos. Último error: %s", last_error)
-
-    fallback = _generic_fallback_answer(question, context_items)
-    if fallback:
-        return _result(
-            fallback,
-            fallback_used=True,
-            model_used="generic_fallback_after_retries_exhausted",
+    try:
+        resp = client.models.generate_content(
+            model=settings.CHAT_MODEL,
+            contents=user_prompt,
+            config=config,
         )
 
-    return _result(
-        "En este momento el motor de respuesta está saturado. Probá nuevamente en unos segundos.",
-        fallback_used=True,
-        model_used="model_unavailable_after_retries",
-    )
+        answer = _clean_final_answer(_extract_text(resp))
+        if _is_procedural_question(question):
+            answer = _format_procedural_answer(answer)
+        answer = _polish_final_answer(answer)
+
+        if answer:
+            if _model_answer_conflicts_with_context(answer, question, context_items):
+                fallback = _generic_fallback_answer(question, context_items)
+                if fallback:
+                    return _result(
+                        fallback,
+                        fallback_used=True,
+                        model_used="generic_fallback_after_conflicting_model_answer",
+                    )
+
+            return _result(
+                answer,
+                fallback_used=False,
+                model_used=settings.CHAT_MODEL,
+            )
+
+        logger.warning("Gemini respondió sin texto utilizable.")
+
+        fallback = _generic_fallback_answer(question, context_items)
+        if fallback:
+            return _result(
+                fallback,
+                fallback_used=True,
+                model_used="generic_fallback_empty_model_answer",
+            )
+
+        return _result(
+            "No encontré una respuesta clara en este momento con el contexto disponible.",
+            fallback_used=True,
+            model_used="empty_model_answer_no_fallback",
+        )
+
+    except Exception as e:
+        error_text = str(e)
+        error_text_lower = error_text.lower()
+
+        retryable = (
+            "503" in error_text
+            or "unavailable" in error_text_lower
+            or "high demand" in error_text_lower
+            or "429" in error_text
+            or "resource_exhausted" in error_text_lower
+            or "quota" in error_text_lower
+        )
+
+        if retryable:
+            logger.warning(
+                "Gemini saturado al responder. Se usa fallback local. Error: %s",
+                error_text,
+            )
+        else:
+            logger.exception("Error respondiendo con Gemini: %s", error_text)
+
+        fallback = _generic_fallback_answer(question, context_items)
+        if fallback:
+            return _result(
+                fallback,
+                fallback_used=True,
+                model_used="generic_fallback_after_model_exception",
+            )
+
+        return _result(
+            "En este momento el motor de respuesta está saturado. Probá nuevamente en unos segundos.",
+            fallback_used=True,
+            model_used="model_unavailable_after_exception",
+        )
