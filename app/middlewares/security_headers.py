@@ -7,10 +7,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "ALLOWALL"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+
+        allowed_frame_ancestors = [
+            "'self'",
+            "https://guiasrapidas1.salta.gob.ar",
+            "https://salta.gob.ar",
+            "https://www.salta.gob.ar",
+            "https://*.salta.gob.ar",
+            "http://localhost:8888",
+            "http://127.0.0.1:8888",
+            "https://localhost:8888",
+            "https://127.0.0.1:8888",
+        ]
 
         csp = (
             "default-src 'self'; "
@@ -19,7 +30,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "script-src 'self' 'unsafe-inline'; "
             "font-src 'self' data:; "
             "connect-src 'self'; "
-            "frame-ancestors 'self' https://guiasrapidas1.salta.gob.ar; "
+            f"frame-ancestors {' '.join(allowed_frame_ancestors)}; "
             "base-uri 'self'; "
             "form-action 'self';"
         )
