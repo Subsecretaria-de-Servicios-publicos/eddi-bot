@@ -21,6 +21,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "http://127.0.0.1:8888",
             "https://localhost:8888",
             "https://127.0.0.1:8888",
+            "http://kubernetes.salta.gob.ar:30113/",
         ]
 
         csp = (
