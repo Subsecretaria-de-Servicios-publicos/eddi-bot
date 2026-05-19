@@ -4,12 +4,14 @@ import time
 import httpx
 from google import genai
 from google.genai import types
+from openai import OpenAI
 
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
+gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
+openai_client = OpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
 
 
 def _extract_embedding(resp) -> list[float]:
@@ -33,6 +35,7 @@ def _is_not_found_embedding_error(exc: Exception) -> bool:
         or "not_found" in text
         or "is not found" in text
         or "not supported for embedcontent" in text
+        or "model_not_found" in text
     )
 
 
@@ -46,14 +49,17 @@ def _is_retryable_embedding_error(exc: Exception) -> bool:
         or "high demand" in text
         or "timeout" in text
         or "temporarily unavailable" in text
+        or "rate limit" in text
     )
 
 
-def embed_text(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
-    if not text or not text.strip():
-        return []
+def _embedding_provider() -> str:
+    provider = (settings.EMBEDDING_PROVIDER or settings.LLM_PROVIDER or "gemini").strip().lower()
+    return provider or "gemini"
 
-    if not client or not settings.GEMINI_API_KEY:
+
+def _embed_with_gemini(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
+    if not gemini_client or not settings.GEMINI_API_KEY:
         logger.warning("No hay GEMINI_API_KEY configurada para embeddings. Se usará fallback textual.")
         return []
 
@@ -62,19 +68,16 @@ def embed_text(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
 
     for attempt in range(max_retries):
         try:
-            resp = client.models.embed_content(
+            resp = gemini_client.models.embed_content(
                 model=settings.EMBEDDING_MODEL,
                 contents=[text],
                 config=types.EmbedContentConfig(task_type=task_type),
             )
             vector = _extract_embedding(resp)
-
             if vector:
                 return vector
-
             logger.warning("Gemini embeddings respondió sin vector utilizable. Se usará fallback textual.")
             return []
-
         except (httpx.RemoteProtocolError, httpx.HTTPError) as e:
             last_error = e
             wait_seconds = 0.5
@@ -87,39 +90,59 @@ def embed_text(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
             )
             time.sleep(wait_seconds)
             continue
-
         except Exception as e:
             last_error = e
-
             if _is_not_found_embedding_error(e):
-                logger.warning(
-                    "El modelo de embeddings configurado no existe o no está soportado (%s). "
-                    "Se desactiva embedding y se usará fallback textual.",
-                    settings.EMBEDDING_MODEL,
-                )
+                logger.warning("El modelo de embeddings configurado no existe o no está soportado (%s). Se usará fallback textual.", settings.EMBEDDING_MODEL)
                 return []
-
             if _is_retryable_embedding_error(e):
                 wait_seconds = 0.5
-                logger.warning(
-                    "Gemini embeddings saturado o temporalmente no disponible (intento %s/%s). "
-                    "Reintentando en %s s. Error: %s",
-                    attempt + 1,
-                    max_retries,
-                    wait_seconds,
-                    str(e),
-                )
+                logger.warning("Gemini embeddings saturado o temporalmente no disponible (intento %s/%s). Reintentando en %s s. Error: %s", attempt + 1, max_retries, wait_seconds, str(e))
                 time.sleep(wait_seconds)
                 continue
-
-            logger.warning(
-                "Error generando embedding. Se usará fallback textual. Error: %s",
-                str(e),
-            )
+            logger.warning("Error generando embedding con Gemini. Se usará fallback textual. Error: %s", str(e))
             return []
 
-    logger.warning("No se pudo generar embedding tras los reintentos. Se usará fallback textual. Último error: %s", last_error)
+    logger.warning("No se pudo generar embedding con Gemini tras los reintentos. Se usará fallback textual. Último error: %s", last_error)
     return []
+
+
+def _embed_with_openai(text: str) -> list[float]:
+    if not openai_client or not settings.OPENAI_API_KEY:
+        logger.warning("No hay OPENAI_API_KEY configurada para embeddings. Se usará fallback textual.")
+        return []
+
+    try:
+        kwargs = {
+            "model": settings.OPENAI_EMBEDDING_MODEL,
+            "input": text,
+        }
+        if settings.OPENAI_EMBEDDING_DIMENSIONS:
+            kwargs["dimensions"] = settings.OPENAI_EMBEDDING_DIMENSIONS
+        resp = openai_client.embeddings.create(**kwargs)
+        data = getattr(resp, "data", None) or []
+        if not data:
+            logger.warning("OpenAI embeddings respondió sin vector utilizable. Se usará fallback textual.")
+            return []
+        embedding = getattr(data[0], "embedding", None) or []
+        return list(embedding)
+    except Exception as e:
+        if _is_not_found_embedding_error(e):
+            logger.warning("El modelo de embeddings OpenAI configurado no existe o no está soportado (%s). Se usará fallback textual.", settings.OPENAI_EMBEDDING_MODEL)
+            return []
+        if _is_retryable_embedding_error(e):
+            logger.warning("OpenAI embeddings saturado o temporalmente no disponible. Se usará fallback textual. Error: %s", str(e))
+            return []
+        logger.warning("Error generando embedding con OpenAI. Se usará fallback textual. Error: %s", str(e))
+        return []
+
+
+def embed_text(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
+    if not text or not text.strip():
+        return []
+    if _embedding_provider() == "openai":
+        return _embed_with_openai(text)
+    return _embed_with_gemini(text, task_type=task_type)
 
 
 def embed_document(text: str, title: str | None = None) -> list[float]:

@@ -30,6 +30,8 @@ class ChatResponse(BaseModel):
     sources: list[ChatSourceItem] = []
     used_chunks: int = 0
     confidence: str = "medium"
+    fallback_used: bool = False
+    model_used: Optional[str] = None
 
 
 class SourceCreate(BaseModel):

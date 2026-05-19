@@ -14,6 +14,76 @@ from ..services.image_cropper import pick_best_ocr_block, generate_crop_for_bloc
 router = APIRouter(prefix="/rag/eddi", tags=["public-chat"])
 
 
+def _session_history(session: ChatSession | None, limit: int = 6) -> list[dict]:
+    if not session:
+        return []
+
+    ordered = sorted(session.messages, key=lambda item: item.created_at or 0)
+    items = ordered[-limit:]
+
+    return [
+        {
+            "role": (item.role or "").strip().lower(),
+            "message_text": (item.message_text or "").strip(),
+        }
+        for item in items
+        if (item.message_text or "").strip()
+    ]
+
+
+def _normalize_question(value: str) -> str:
+    return " ".join((value or "").strip().lower().split())
+
+
+def _is_context_dependent_question(message: str) -> bool:
+    q = _normalize_question(message)
+    if not q:
+        return False
+
+    markers = [
+        " y ", "y si", "y en", "y para", "y cuando", "entonces",
+        "eso", "esto", "esa", "ese", "esas", "esos",
+        "ahi", "ahí", "asi", "así", "tambien", "también",
+        "despues", "después", "luego", "en ese caso", "qué pasa", "que pasa",
+    ]
+
+    if len(q.split()) <= 10 and any(marker in f" {q} " for marker in markers):
+        return True
+
+    if q.startswith(("y ", "entonces", "después", "despues", "luego", "en ese caso")):
+        return True
+
+    referential_phrases = [
+        "ese paso", "ese campo", "ese botón", "ese boton", "esa opción", "esa opcion",
+        "esa pantalla", "el plazo", "la vigencia", "los requisitos", "esa parte",
+    ]
+    return any(phrase in q for phrase in referential_phrases)
+
+
+def _build_effective_question(message: str, history: list[dict]) -> str:
+    current = (message or "").strip()
+    if not current or not history or not _is_context_dependent_question(current):
+        return current
+
+    recent = history[-4:]
+    lines = []
+    for item in recent:
+        role = "Usuario" if item.get("role") == "user" else "Asistente"
+        text_value = (item.get("message_text") or "").strip()
+        if not text_value:
+            continue
+        lines.append(f"{role}: {text_value}")
+
+    if not lines:
+        return current
+
+    return (
+        "Contexto reciente de la conversación:\n"
+        + "\n".join(lines)
+        + f"\nConsulta actual del usuario: {current}"
+    )
+
+
 def build_crop_for_source(db: Session, source_item: dict, question: str) -> str | None:
     if source_item.get("content_kind") != "image_ocr":
         return None
@@ -85,15 +155,19 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
         db.add(session)
         db.flush()
 
+    conversation_history = _session_history(session, limit=6)
+    effective_question = _build_effective_question(payload.message, conversation_history)
+
     try:
         retrieved = retrieve_chunks(
             db,
-            payload.message,
+            effective_question,
             document_type=payload.document_type,
             organism=payload.organism,
             topic=payload.topic,
         )
         print("DEBUG chat question:", payload.message)
+        print("DEBUG effective question:", effective_question)
         print("DEBUG retrieved count:", len(retrieved))
         for i, r in enumerate(retrieved[:5], start=1):
             print(
@@ -125,7 +199,11 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
     model_used = None
 
     try:
-        result = answer_question(payload.message, retrieved)
+        result = answer_question(
+            payload.message,
+            retrieved,
+            conversation_history=conversation_history,
+        )
         answer, fallback_used, model_used = _normalize_answer_result(result)
 
         if not answer:
@@ -147,6 +225,8 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
             "topic": payload.topic,
         },
         "message": payload.message,
+        "effective_question": effective_question,
+        "history_used": conversation_history,
         "session_key": session_key,
     }
 
@@ -157,6 +237,8 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
             "fallback_used": fallback_used,
             "model_used": model_used,
             "retrieved_count": len(retrieved),
+            "effective_question": effective_question,
+            "history_used": conversation_history,
         },
     }
 
@@ -223,4 +305,6 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
         sources=sources,
         used_chunks=len(retrieved),
         confidence=confidence,
+        fallback_used=fallback_used,
+        model_used=model_used,
     )

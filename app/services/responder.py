@@ -3,12 +3,14 @@ import re
 
 from google import genai
 from google.genai import types
+from openai import OpenAI
 
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
+gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
+openai_client = OpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
 
 SYSTEM_PROMPT = """
 Sos EDDI, un asistente documental especializado en responder consultas
@@ -29,6 +31,78 @@ Reglas:
 - No uses listas con *, -, ni numeración markdown.
 - Si la evidencia es insuficiente, decilo explícitamente.
 """
+
+
+def _llm_provider() -> str:
+    provider = (settings.LLM_PROVIDER or "gemini").strip().lower()
+    return provider or "gemini"
+
+
+def _current_chat_model() -> str:
+    if _llm_provider() == "openai":
+        return settings.OPENAI_CHAT_MODEL
+    return settings.CHAT_MODEL
+
+
+def _conversation_history_text(conversation_history: list[dict] | None, max_items: int = 6) -> str:
+    if not conversation_history:
+        return ""
+
+    lines = []
+    for item in (conversation_history or [])[-max_items:]:
+        role = (item.get("role") or "").strip().lower()
+        text_value = (item.get("message_text") or "").strip()
+        if not text_value:
+            continue
+        role_label = "Usuario" if role == "user" else "Asistente"
+        lines.append(f"{role_label}: {text_value}")
+
+    return "\n".join(lines).strip()
+
+
+def _build_user_prompt(question: str, context_text: str, conversation_history: list[dict] | None = None) -> str:
+    history_block = _conversation_history_text(conversation_history)
+
+    parts = []
+    if history_block:
+        parts.append(
+            "Historial reciente de la conversación (usalo solo para resolver referencias como 'eso', 'ese paso', 'ahí', 'después', pero nunca para inventar información fuera del contexto documental):\n"
+            + history_block
+        )
+
+    parts.append(f"Pregunta del usuario:\n{question}")
+    parts.append(f"Contexto documental recuperado:\n{context_text}")
+    parts.append(
+        "Instrucciones de respuesta:\n"
+        "- Respondé solo con base en el contexto recuperado.\n"
+        "- Redactá la respuesta como una explicación útil para una persona usuaria del sistema.\n"
+        "- Si la consulta es sobre una funcionalidad, empezá con una frase breve explicando para qué sirve.\n"
+        "- Si hay pasos, presentalos en orden y con redacción limpia.\n"
+        "- No repitas literalmente el título del documento salvo que sea necesario.\n"
+        "- No copies fragmentos cortados ni texto sucio.\n"
+        "- No desarrolles secciones que no respondan a la consulta puntual.\n"
+        "- No uses markdown.\n"
+        "- No inventes nada fuera del contexto."
+    )
+
+    return "\n\n".join(parts)
+
+
+def _extract_openai_text(resp) -> str:
+    text = getattr(resp, "output_text", None)
+    if text and str(text).strip():
+        return str(text).strip()
+
+    output = getattr(resp, "output", None) or []
+    pieces = []
+    for item in output:
+        content = getattr(item, "content", None) or []
+        for part in content:
+            part_text = getattr(part, "text", None)
+            if part_text:
+                pieces.append(str(part_text))
+
+    return "\n".join(x.strip() for x in pieces if str(x).strip()).strip()
 
 
 def _result(answer: str, fallback_used: bool, model_used: str | None) -> dict:
@@ -611,7 +685,7 @@ def _model_answer_conflicts_with_context(answer: str, question: str, retrieved: 
     return False
 
 
-def answer_question(question: str, retrieved: list[dict]) -> dict:
+def answer_question(question: str, retrieved: list[dict], conversation_history: list[dict] | None = None) -> dict:
     if not retrieved:
         return _result(
             "No encontré evidencia suficiente en la base documental publicada para responder con precisión esa consulta.",
@@ -634,41 +708,41 @@ def answer_question(question: str, retrieved: list[dict]) -> dict:
             model_used="no_context_after_filter",
         )
 
-    if not settings.GEMINI_API_KEY or not client:
-        logger.error("No hay GEMINI_API_KEY configurada para responder preguntas.")
-        fallback = _generic_fallback_answer(question, context_items)
-        if fallback:
+    provider = _llm_provider()
+
+    if provider == "openai":
+        if not settings.OPENAI_API_KEY or not openai_client:
+            logger.error("No hay OPENAI_API_KEY configurada para responder preguntas.")
+            fallback = _generic_fallback_answer(question, context_items)
+            if fallback:
+                return _result(
+                    fallback,
+                    fallback_used=True,
+                    model_used="generic_fallback_missing_openai_api_key",
+                )
             return _result(
-                fallback,
+                "El sistema no tiene configurado el proveedor OpenAI para responder en este momento.",
                 fallback_used=True,
-                model_used="generic_fallback_missing_gemini_api_key",
+                model_used="missing_openai_api_key",
             )
-        return _result(
-            "El sistema no tiene configurado el proveedor de IA para responder en este momento.",
-            fallback_used=True,
-            model_used="missing_gemini_api_key",
-        )
+    else:
+        if not settings.GEMINI_API_KEY or not gemini_client:
+            logger.error("No hay GEMINI_API_KEY configurada para responder preguntas.")
+            fallback = _generic_fallback_answer(question, context_items)
+            if fallback:
+                return _result(
+                    fallback,
+                    fallback_used=True,
+                    model_used="generic_fallback_missing_gemini_api_key",
+                )
+            return _result(
+                "El sistema no tiene configurado el proveedor de IA para responder en este momento.",
+                fallback_used=True,
+                model_used="missing_gemini_api_key",
+            )
 
     context_text = _build_context(question, context_items)
-
-    user_prompt = f"""
-Pregunta del usuario:
-{question}
-
-Contexto documental recuperado:
-{context_text}
-
-Instrucciones de respuesta:
-- Respondé solo con base en el contexto recuperado.
-- Redactá la respuesta como una explicación útil para una persona usuaria del sistema.
-- Si la consulta es sobre una funcionalidad, empezá con una frase breve explicando para qué sirve.
-- Si hay pasos, presentalos en orden y con redacción limpia.
-- No repitas literalmente el título del documento salvo que sea necesario.
-- No copies fragmentos cortados ni texto sucio.
-- No desarrolles secciones que no respondan a la consulta puntual.
-- No uses markdown.
-- No inventes nada fuera del contexto.
-"""
+    user_prompt = _build_user_prompt(question, context_text, conversation_history=conversation_history)
 
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
@@ -676,13 +750,24 @@ Instrucciones de respuesta:
     )
 
     try:
-        resp = client.models.generate_content(
-            model=settings.CHAT_MODEL,
-            contents=user_prompt,
-            config=config,
-        )
+        if provider == "openai":
+            resp = openai_client.responses.create(
+                model=settings.OPENAI_CHAT_MODEL,
+                input=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+            )
+            answer = _clean_final_answer(_extract_openai_text(resp))
+        else:
+            resp = gemini_client.models.generate_content(
+                model=settings.CHAT_MODEL,
+                contents=user_prompt,
+                config=config,
+            )
+            answer = _clean_final_answer(_extract_text(resp))
 
-        answer = _clean_final_answer(_extract_text(resp))
         if _is_procedural_question(question):
             answer = _format_procedural_answer(answer)
         answer = _polish_final_answer(answer)
@@ -700,10 +785,13 @@ Instrucciones de respuesta:
             return _result(
                 answer,
                 fallback_used=False,
-                model_used=settings.CHAT_MODEL,
+                model_used=_current_chat_model(),
             )
 
-        logger.warning("Gemini respondió sin texto utilizable.")
+        if provider == "openai":
+            logger.warning("OpenAI respondió sin texto utilizable.")
+        else:
+            logger.warning("Gemini respondió sin texto utilizable.")
 
         fallback = _generic_fallback_answer(question, context_items)
         if fallback:
@@ -734,11 +822,12 @@ Instrucciones de respuesta:
 
         if retryable:
             logger.warning(
-                "Gemini saturado al responder. Se usa fallback local. Error: %s",
+                "%s saturado al responder. Se usa fallback local. Error: %s",
+                "OpenAI" if provider == "openai" else "Gemini",
                 error_text,
             )
         else:
-            logger.exception("Error respondiendo con Gemini: %s", error_text)
+            logger.exception("Error respondiendo con %s: %s", "OpenAI" if provider == "openai" else "Gemini", error_text)
 
         fallback = _generic_fallback_answer(question, context_items)
         if fallback:

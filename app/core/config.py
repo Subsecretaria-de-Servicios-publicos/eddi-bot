@@ -9,9 +9,18 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
 
+    LLM_PROVIDER: str = "gemini"
+    EMBEDDING_PROVIDER: str = "gemini"
+
     GEMINI_API_KEY: str = ""
     CHAT_MODEL: str = "gemini-2.5-flash"
     EMBEDDING_MODEL: str = "gemini-embedding-001"
+
+    OPENAI_API_KEY: str = ""
+    OPENAI_CHAT_MODEL: str = "gpt-4.1-mini"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
+    OPENAI_EMBEDDING_DIMENSIONS: int = 3072
+
     VECTOR_DIMENSION: int = 3072
 
     ADMIN_TOKEN: str = "CAMBIAR_TOKEN_ADMIN"
