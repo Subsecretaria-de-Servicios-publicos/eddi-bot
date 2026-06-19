@@ -22,7 +22,7 @@
       <div class="chat-topbar-status">
         <span class="chat-status-badge-red">
           <span class="dot"></span>
-          Activo
+          <span class="badge-label">Activo</span>
         </span>
       </div>
     </section>
@@ -52,12 +52,9 @@
               placeholder="Escribí tu consulta..."
               required
             ></textarea>
+            <button id="chat-send" type="button" class="compose-send-btn">Enviar →</button>
           </div>
-
-          <button id="chat-send" type="button" class="compose-send-btn">Enviar</button>
         </div>
-
-        <div id="chat-sources" class="chat-sources"></div>
       </main>
 
     </section>
@@ -113,7 +110,6 @@
   const messagesEl = document.getElementById("chat-messages");
   const inputEl = document.getElementById("chat-input");
   const sendEl = document.getElementById("chat-send");
-  const sourcesEl = document.getElementById("chat-sources");
 
   let sessionKey = localStorage.getItem("eddi_session_key") || "";
   let sending = false;
@@ -189,49 +185,42 @@
     return filtered.slice(0, 3);
   }
 
-  function renderSources(sources) {
-    sourcesEl.innerHTML = "";
-
-    if (!sources || !sources.length) return;
+  function renderSources(sources, bubble) {
+    if (!sources || !sources.length || !bubble) return;
 
     const normalized = dedupeSources(sources);
-    const compactSources = pickCompactSources(normalized);
+    const compact = pickCompactSources(normalized);
+    if (!compact.length) return;
 
-    const title = document.createElement("div");
-    title.className = "sources-title";
-    title.textContent = "Fuentes consultadas";
-    sourcesEl.appendChild(title);
+    const divider = document.createElement("hr");
+    divider.className = "inline-sources-divider";
 
-    if (compactSources.length) {
-      const list = document.createElement("div");
-      list.className = "sources-compact-list";
+    const label = document.createElement("div");
+    label.className = "inline-sources-label";
+    label.textContent = "Fuentes consultadas";
 
-      compactSources.forEach(src => {
-        const item = document.createElement("div");
-        item.className = "source-item compact source-pdf-item";
+    const list = document.createElement("div");
+    list.className = "inline-sources-list";
 
-        item.innerHTML = `
-          <div class="source-head">
-            <div class="source-title">
-              ${
-                src.url
-                  ? `
-                    <a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer" class="source-pdf-link">
-                      <span class="source-pdf-badge">PDF</span>
-                      <span class="source-pdf-name">${escapeHtml(src.title || "Abrir PDF")}</span>
-                    </a>
-                  `
-                  : `${escapeHtml(src.title || "Documento")}`
-              }
-            </div>
-          </div>
-        `;
+    compact.forEach(src => {
+      const item = document.createElement("div");
+      if (src.url) {
+        item.innerHTML = `<a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer" class="inline-source-link">
+          <span class="inline-source-badge">PDF</span>
+          <span>${escapeHtml(src.title || "Abrir PDF")}</span>
+        </a>`;
+      } else {
+        item.innerHTML = `<span class="inline-source-link">
+          <span class="inline-source-badge">PDF</span>
+          <span>${escapeHtml(src.title || "Documento")}</span>
+        </span>`;
+      }
+      list.appendChild(item);
+    });
 
-        list.appendChild(item);
-      });
-
-      sourcesEl.appendChild(list);
-    }
+    bubble.appendChild(divider);
+    bubble.appendChild(label);
+    bubble.appendChild(list);
   }
 
   async function sendMessage() {
@@ -243,7 +232,6 @@
 
     addMessage("user", text);
     inputEl.value = "";
-    sourcesEl.innerHTML = "";
 
     const loadingNode = addMessage("assistant", "Procesando consulta...");
 
@@ -273,8 +261,8 @@
       localStorage.setItem("eddi_session_key", sessionKey);
 
       loadingNode.remove();
-      addMessage("assistant", data.answer || "No se pudo generar una respuesta.");
-      renderSources(data.sources || []);
+      const msgRow = addMessage("assistant", data.answer || "No se pudo generar una respuesta.");
+      renderSources(data.sources || [], msgRow.querySelector(".msg-bubble"));
     } catch (err) {
       loadingNode.remove();
       addMessage("assistant", "Ocurrió un error al procesar tu consulta.");
