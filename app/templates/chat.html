@@ -68,15 +68,19 @@
   .chat-layout {
     display: flex;
     flex-direction: row;
-    /* Elimina el espacio reservado para el aside */
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
   .chat-main {
     flex: 1 1 100%;
     width: 100%;
     max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
   }
-  /* Puedes eliminar o comentar cualquier regla relacionada con .chat-sidebar */
-  /* ...el resto del CSS igual... */
   .source-pdf-item {
     margin-bottom: 8px;
   }
